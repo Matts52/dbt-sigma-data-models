@@ -45,7 +45,7 @@ macros:
         description: Sigma connection id for this table's `source`. Defaults to the `sigma_connection_id` project var.
       - name: columns
         type: list
-        description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Column names must be unique within a table; a duplicate raises a compiler error.
+        description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated as passthrough columns from the live relation via `adapter.get_columns_in_relation` (requires a connection - raises a clear compiler error under `dbt parse`). Column names must be unique within a table; a duplicate raises a compiler error.
       - name: metrics
         type: list | dict
         description: "Either a dict mapping metric name to formula, or a list of `sigma_data_models.metric(...)` specs. Metric names must be unique within a table; a duplicate raises a compiler error. Omitted entirely from the emitted table when empty, rather than an empty list."

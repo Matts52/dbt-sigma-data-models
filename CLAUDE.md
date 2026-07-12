@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-dbt-sigma-data-models composes [Sigma data models](https://help.sigmacomputing.com/docs/manage-data-models-as-code) from dbt macros instead of hand-writing the Sigma JSON spec. The compiled spec is attached to a dbt model's `meta` config via `sigma_data_models.materialize()`, so it lands in `manifest.json` on `dbt parse`/`dbt compile`. The macros never touch the underlying tables or Sigma's API — this is pure compile-time JSON composition, and never needs a warehouse connection.
+dbt-sigma-data-models composes [Sigma data models](https://help.sigmacomputing.com/docs/manage-data-models-as-code) from dbt macros instead of hand-writing the Sigma JSON spec. The compiled spec is attached to a dbt model's `meta` config via `sigma_data_models.materialize()`, so it lands in `manifest.json` on `dbt parse`/`dbt compile`. The macros never touch Sigma's API — this is compile-time JSON composition, and never needs a warehouse connection *unless* a table's `columns` are left off `sigma_data_models.table()` (auto-population via `adapter.get_columns_in_relation`).
 
 The compiled shape is meant to be structurally faithful to Sigma's own [data model representation examples](https://help.sigmacomputing.com/docs/data-model-representation-example-library) - `pages[].elements[]`, `source.path`, `{id, formula}` columns, relationships nested under their source table, etc. - not an independently-invented shape. See [Coverage](README.md#coverage) in the README for what's modeled vs. not.
 
@@ -25,7 +25,7 @@ dbt parse --profile sigma_integration_tests_duckdb --no-partial-parse
 dbt run-operation assert_sigma_spec --profile sigma_integration_tests_duckdb
 ```
 
-Since the macros are pure compile-time JSON composition, `dbt parse` alone is enough to verify a spec compiles - no adapter-specific SQL is involved anywhere. `assert_sigma_spec` (in `integration_tests/macros/assert_sigma_spec.sql`) is the real correctness check: it asserts the composed spec's *shape* (field names, nesting, which fields are present/omitted) matches Sigma's documented examples, not just that compilation doesn't error. See `integration_tests/README.md` for which specific Sigma example each assertion corresponds to.
+Since the demo model always passes explicit `columns`, `dbt parse` alone is enough to verify it compiles without a connection - no adapter-specific SQL is involved on that path. The column auto-population path (`columns` left off `sigma_data_models.table()`) requires `execute=True`, so it's only exercised via `dbt run-operation` (see `assert_sigma_spec`'s auto-population check), never by the demo model itself - adding it there would break the connection-free `dbt parse` step for the whole project. `assert_sigma_spec` (in `integration_tests/macros/assert_sigma_spec.sql`) is the real correctness check: it asserts the composed spec's *shape* (field names, nesting, which fields are present/omitted) matches Sigma's documented examples, not just that compilation doesn't error. See `integration_tests/README.md` for which specific Sigma example each assertion corresponds to.
 
 ## Architecture
 

@@ -11,6 +11,22 @@
    casing a caller (or environment) happens to pass in. #}
 {% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ identifier) | lower %}
 
+{% if not columns %}
+  {% if not execute %}
+    {% do exceptions.raise_compiler_error(
+      "sigma_data_models.table('" ~ key ~ "'): columns were left empty, which auto-populates them from " ~
+      database ~ "." ~ schema ~ "." ~ identifier ~ " - that requires a live connection, so it " ~
+      "only works under `dbt run`/`dbt compile`, not `dbt parse`. Pass `columns` explicitly to " ~
+      "compile without a connection."
+    ) %}
+  {% endif %}
+  {% set relation = api.Relation.create(database=database, schema=schema, identifier=identifier) %}
+  {% set columns = [] %}
+  {% for relation_column in adapter.get_columns_in_relation(relation) %}
+    {% do columns.append(relation_column.name) %}
+  {% endfor %}
+{% endif %}
+
 {% set frozen_columns = [] %}
 {% set column_ids = {} %}
 {% for column in columns %}

@@ -172,6 +172,20 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: column ids are not deterministic across identical calls') %}
 {% endif %}
 
+{# Leaving `columns` empty auto-populates passthrough columns from the live relation - only
+   possible under `dbt run-operation`/`dbt run`/`dbt compile` (execute=True), never `dbt parse`. #}
+{% set auto_populated_table = sigma_data_models.table('accounts_auto_populate_check', identifier='accounts') %}
+{% if auto_populated_table.columns | length == 0 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: leaving columns empty must auto-populate from the live relation, got none') %}
+{% endif %}
+{% set auto_populated_names = auto_populated_table._column_ids.keys() | list %}
+{% if 'account_guid' not in auto_populated_names or 'account_owner_user_guid' not in auto_populated_names %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: auto-populated columns must include the real columns on the relation, got ' ~ auto_populated_names) %}
+{% endif %}
+{% if auto_populated_table.columns[0].keys() | list | sort != ['formula', 'id'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: an auto-populated column must still be a plain passthrough column ({id, formula}), got ' ~ (auto_populated_table.columns[0].keys() | list)) %}
+{% endif %}
+
 {# Duplicate `key`s across different sigma.table() calls must not collide on element_id -
    `key` is a local wiring label, ids are frozen off the physical identifier instead. #}
 {% set table_a = sigma_data_models.table('shared_key', identifier='accounts', columns=['account_guid']) %}

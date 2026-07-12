@@ -1,6 +1,6 @@
 # dbt-sigma-data-models
 
-Compose [Sigma data models](https://help.sigmacomputing.com/docs/manage-data-models-as-code) from a handful of macros instead of hand-writing the full Sigma JSON spec. The compiled spec is attached to a dbt model's `meta` config, so it lands directly in `manifest.json` on `dbt parse` / `dbt compile`. Nothing about the underlying tables is ever touched — no warehouse connection is required to compile a spec at all.
+Compose [Sigma data models](https://help.sigmacomputing.com/docs/manage-data-models-as-code) from a handful of macros instead of hand-writing the full Sigma JSON spec. The compiled spec is attached to a dbt model's `meta` config, so it lands directly in `manifest.json` on `dbt parse` / `dbt compile`. Nothing about the underlying tables is ever touched; a warehouse connection is only needed if you lean on `sigma_data_models.table()`'s column auto-population (see below) — with explicit `columns`, `dbt parse` alone is enough.
 
 The compiled shape follows Sigma's own documented [data model representation examples](https://help.sigmacomputing.com/docs/data-model-representation-example-library) as closely as this package's scope allows — see [Coverage](#coverage) for exactly what's modeled and what isn't, and `integration_tests/README.md` for which specific example each shape is checked against.
 
@@ -63,6 +63,8 @@ exposures:
 **`identifier`** is `sigma_data_models.table()`'s second positional arg, so `sigma_data_models.table('accounts', 'stg_accounts', ...)` works without spelling out `identifier=`. If the Sigma key and the dbt model name already match, skip it entirely — it defaults to `key`.
 
 **Columns** can be bare strings — `columns=['account_guid', 'account_name']` — which produce a *passthrough* column bound directly to the warehouse column: `{id, formula: '[stg_accounts/Account Guid]'}`, with no `name` field, matching an unmodified source column in Sigma's own representation. Passing an explicit `formula` via `sigma_data_models.column(name, formula=...)` instead produces a *calculated* column — `{id, formula, name}` — for anything Sigma itself couldn't derive from the source column alone. Column names are always lowercased and must be unique within a table; a duplicate raises a compiler error rather than silently colliding on `id`.
+
+Leaving `columns` off `sigma_data_models.table()` entirely (rather than passing bare strings) auto-populates every column as a passthrough column from the live warehouse relation (`adapter.get_columns_in_relation`) instead. This requires a real connection, so it only works under `dbt run`/`dbt compile` (where `execute` is true) — under connection-free `dbt parse`, a table with no `columns` raises a clear compiler error rather than silently compiling to zero columns. Pass `columns` explicitly to keep a table `dbt parse`-able without a connection.
 
 **Metrics** can be a plain `{name: formula}` dict — `metrics={'count_accounts': 'CountDistinct([Account Guid])'}` — and `sigma_data_models.metric(...)` is only needed for a `display_name` override. Metric names must be unique within a table; a duplicate raises a compiler error.
 
