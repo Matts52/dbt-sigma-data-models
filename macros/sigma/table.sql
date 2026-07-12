@@ -3,13 +3,18 @@
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
 {% set connection_id = connection_id or var('sigma_connection_id', none) %}
-{# Element ids are frozen off the physical db.schema.identifier a table is bound to, not
-   `key` - `key` is only a local label used to wire relationships within one sigma.model()
-   call, so the same `key` can be reused across separate models without id collisions.
-   Lowercased because unquoted identifiers get uppercased by some adapters (e.g. Snowflake) -
-   without this, the same physical table could freeze to different ids depending on which
-   casing a caller (or environment) happens to pass in. #}
+{# Element ids are frozen off `key` plus the physical db.schema.identifier a table is bound
+   to - both, not just one. `key` alone would let two different physical tables collide if two
+   models happened to reuse the same key; the identifier alone would let the same physical
+   table collide with itself when referenced twice in one model under different keys (a
+   self-join, e.g. 'employees' bound twice as 'employees' and 'managers') - ids only need to be
+   unique within a single sigma_data_models.model() call, and `key` is already enforced unique
+   there, so combining both is sufficient and self-joins get distinct ids for free. The
+   identifier portion is lowercased because unquoted identifiers get uppercased by some
+   adapters (e.g. Snowflake) - without this, the same physical table could freeze to different
+   ids depending on which casing a caller (or environment) happens to pass in. #}
 {% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ identifier) | lower %}
+{% set freeze_scope = key ~ '@' ~ identifier_path %}
 
 {% if not columns %}
   {% if not execute %}
@@ -42,7 +47,7 @@
   {% if column.name in column_ids %}
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate column name '" ~ column.name ~ "' - column names must be unique within a table.") %}
   {% endif %}
-  {% set column_id = sigma_data_models.freeze_id('column:' ~ identifier_path ~ '.' ~ column.name) %}
+  {% set column_id = sigma_data_models.freeze_id('column:' ~ freeze_scope ~ '.' ~ column.name) %}
   {% do column_ids.update({column.name: column_id}) %}
   {# A passthrough column (no explicit `formula`) is bound directly to the warehouse column via
      a `[TableIdentifier/Column Display Name]` formula reference, and carries no `name` field -
@@ -68,7 +73,7 @@
   {% endif %}
   {% do metric_names.append(metric.name) %}
   {% do frozen_metrics.append({
-    "id": sigma_data_models.freeze_id('metric:' ~ identifier_path ~ '.' ~ metric.name),
+    "id": sigma_data_models.freeze_id('metric:' ~ freeze_scope ~ '.' ~ metric.name),
     "formula": metric.formula,
     "name": metric.display_name or sigma_data_models.titleize(metric.name),
   }) %}
@@ -90,7 +95,7 @@
     {% do items.append(column_ids[column_name]) %}
   {% endfor %}
   {% do frozen_folders.append({
-    "id": sigma_data_models.freeze_id('folder:' ~ identifier_path ~ '.' ~ folder.name),
+    "id": sigma_data_models.freeze_id('folder:' ~ freeze_scope ~ '.' ~ folder.name),
     "name": folder.name,
     "items": items,
   }) %}
@@ -107,8 +112,13 @@
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate filter '" ~ filter_key ~ "' - a table can only have one filter per column/kind pair.") %}
   {% endif %}
   {% do filter_keys.append(filter_key) %}
+  {% for reserved_key in ['id', 'columnId', 'kind'] %}
+    {% if reserved_key in filter.options %}
+      {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): filter options can't set '" ~ reserved_key ~ "' - it's already set from `column`/`kind` and would silently overwrite the frozen value.") %}
+    {% endif %}
+  {% endfor %}
   {% set frozen_filter = {
-    "id": sigma_data_models.freeze_id('filter:' ~ identifier_path ~ '.' ~ filter_key),
+    "id": sigma_data_models.freeze_id('filter:' ~ freeze_scope ~ '.' ~ filter_key),
     "columnId": column_ids[filter.column],
     "kind": filter.kind,
   } %}
@@ -127,7 +137,7 @@
 {% set element = {
   "key": key,
   "_column_ids": column_ids,
-  "id": sigma_data_models.freeze_id('table:' ~ identifier_path),
+  "id": sigma_data_models.freeze_id('table:' ~ freeze_scope),
   "kind": "table",
   "source": {
     "connectionId": connection_id,

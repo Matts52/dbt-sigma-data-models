@@ -26,7 +26,7 @@ macros:
 
   - name: table
     description: |
-      A Sigma table element bound to a warehouse relation (`source.kind = 'warehouse-table'`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-single-table. Freezes the element id, and each of its columns'/metrics'/folders' ids, off the table's physical `database.schema.identifier`, lowercased (not `key` - `key` only needs to be unique within one `sigma_data_models.model()` call, so the same `key` can be reused across separate models without id collisions).
+      A Sigma table element bound to a warehouse relation (`source.kind = 'warehouse-table'`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-single-table. Freezes the element id, and each of its columns'/metrics'/folders'/filters' ids, off `key` plus the table's physical `database.schema.identifier` (lowercased) together, so a self-join (the same physical table bound twice under different keys within one model) gets distinct ids per occurrence rather than colliding. Ids only need to be unique within one `sigma_data_models.model()` call (where `key` is already enforced unique), so the same `key` can still be reused freely across separate models.
     arguments:
       - name: key
         type: string
@@ -127,7 +127,7 @@ macros:
         description: Sigma filter kind, e.g. `'number-range'`/`'list'`/`'text-match'`.
       - name: options
         type: dict
-        description: "Kind-specific fields, passed through verbatim using Sigma's own field names, e.g. `{'mode': 'include', 'values': ['Manufacturing']}`. Default `{}`."
+        description: "Kind-specific fields, passed through verbatim using Sigma's own field names, e.g. `{'mode': 'include', 'values': ['Manufacturing']}`. Default `{}`. Can't set `id`/`columnId`/`kind` - those are already derived from `column`/`kind`, and `sigma_data_models.table()` raises a compiler error rather than letting `options` silently overwrite them."
 
   - name: materialize
     description: |
@@ -142,11 +142,11 @@ macros:
 
   - name: freeze_id
     description: |
-      Returns `local_md5(path)` for a stable path string. Same path in, same id out, on every compile — the id only changes if the underlying path (a table's `database.schema.identifier` for table/column/metric/folder/filter ids, or a relationship's `from`/`to`/`from_column`/`to_column`) is renamed. Used internally; not normally called directly.
+      Returns `local_md5(path)` for a stable path string. Same path in, same id out, on every compile — the id only changes if the underlying path (a table's `key` plus `database.schema.identifier` for table/column/metric/folder/filter ids, or a relationship's `from`/`to`/`from_column`/`to_column`) is renamed. Used internally; not normally called directly.
     arguments:
       - name: path
         type: string
-        description: Stable path string to hash, e.g. `'table:' ~ identifier_path`.
+        description: Stable path string to hash, e.g. `'table:' ~ freeze_scope`.
 
   - name: titleize
     description: |

@@ -194,12 +194,30 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: tables sharing a key but bound to different identifiers must not collide on element id') %}
 {% endif %}
 
-{# element ids are frozen off a lowercased identifier path, so the same physical table bound
-   with different db/schema casing must still freeze to the same id. #}
-{% set table_casing_lower = sigma_data_models.table('casing_check_lower', identifier='accounts', schema='main', columns=['account_guid']) %}
-{% set table_casing_upper = sigma_data_models.table('casing_check_upper', identifier='ACCOUNTS', schema='MAIN', columns=['account_guid']) %}
+{# element ids are frozen off a lowercased identifier path (and `key`, held constant here), so
+   the same key/physical-table pair must still freeze to the same id regardless of db/schema
+   casing. #}
+{% set table_casing_lower = sigma_data_models.table('casing_check', identifier='accounts', schema='main', columns=['account_guid']) %}
+{% set table_casing_upper = sigma_data_models.table('casing_check', identifier='ACCOUNTS', schema='MAIN', columns=['account_guid']) %}
 {% if table_casing_lower.id != table_casing_upper.id %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: the same physical table must freeze to the same id regardless of db/schema/identifier casing') %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: the same key/physical table must freeze to the same id regardless of db/schema/identifier casing') %}
+{% endif %}
+
+{# self-joins: the same physical table referenced twice under different `key`s in one model
+   must get distinct ids everywhere (table, and its columns), not collide. #}
+{% set self_join_spec = sigma_data_models.model(
+  name='Self Join Check',
+  tables=[
+    sigma_data_models.table('employees_self_join', identifier='employees', columns=['employee_guid']),
+    sigma_data_models.table('managers_self_join', identifier='employees', columns=['employee_guid']),
+  ],
+) %}
+{% set self_join_elements = self_join_spec.pages[0].elements %}
+{% if self_join_elements[0].id == self_join_elements[1].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: the same physical table referenced twice under different keys (a self-join) must not collide on element id') %}
+{% endif %}
+{% if self_join_elements[0].columns[0].id == self_join_elements[1].columns[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a self-joined table\'s columns must not collide on id either') %}
 {% endif %}
 
 {{ log('assert_sigma_spec: all assertions passed', info=true) }}
@@ -298,4 +316,9 @@
     ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
   ],
 ) %}
+{% endmacro %}
+
+{% macro assert_filter_options_reserved_key_rejected() %}
+{% do sigma_data_models.table('filter_reserved_key_check', identifier='accounts', columns=['account_guid'],
+  filters=[sigma_data_models.filter('account_guid', kind='list', options={'kind': 'CLOBBERED'})]) %}
 {% endmacro %}

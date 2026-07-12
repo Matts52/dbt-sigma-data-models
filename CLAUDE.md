@@ -31,7 +31,7 @@ Since the demo model always passes explicit `columns`, `dbt parse` alone is enou
 
 ### Core Macros (`macros/sigma/`)
 - `model`: assembles `tables` into a single page, resolves `relationships` into their real nested shape (only possible once every table's real element/column ids exist), strips internal-only fields
-- `table`: a Sigma table element bound to a warehouse relation; freezes ids for itself and its columns/metrics/folders off `database.schema.identifier` (not `key`, which is a purely local wiring label - see `key` handling in `table.sql`/`model.sql`)
+- `table`: a Sigma table element bound to a warehouse relation; freezes ids for itself and its columns/metrics/folders/filters off `key ~ '@' ~ database.schema.identifier` (`freeze_scope`) - both, not just the identifier, so a self-join (same physical table bound twice under different keys) gets distinct ids per occurrence instead of colliding (this was a real bug, fixed after the initial identifier-only design)
 - `column` / `metric` / `relationship` / `folder` / `filter`: normalize inputs into intent descriptors (bare strings/dicts/tuples where possible); `table`/`model` resolve them into Sigma's real field names, since that needs table-level context these macros don't have
 - `materialize`: wires the composed spec into `config(meta={'sigma_data_model': spec})`
 - `freeze_id`: `local_md5(path)` over a stable path — guarantees compile-time determinism, not Sigma-side id permanence
