@@ -13,7 +13,7 @@ macros:
         description: List of `sigma_data_models.table(...)` specs (or dicts) that make up the data model.
       - name: relationships
         type: list
-        description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`.
+        description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`. Each `from`/`to` must reference a `key` present in `tables`, and table `key`s must be unique within this call - both raise a compiler error otherwise, since `relationships` resolves `from`/`to` against `tables` by key.
       - name: page_name
         type: string
         description: Sigma page name. Defaults to `name`.
@@ -29,7 +29,7 @@ macros:
 
   - name: table
     description: |
-      A Sigma table within a data model. Freezes element ids for the table and each of its columns/metrics via `sigma_data_models.freeze_id()`, and can auto-populate `columns` from the live warehouse relation when omitted (requires `dbt run`/`dbt compile`, not `dbt parse`).
+      A Sigma table within a data model. Freezes element ids for the table and each of its columns/metrics via `sigma_data_models.freeze_id()`, keyed off the table's physical `database.schema.identifier`, lowercased (not `key` - `key` only needs to be unique within one `sigma_data_models.model()` call, so the same `key` can be reused across separate models without id collisions). Can auto-populate `columns` from the live warehouse relation when omitted (requires `dbt run`/`dbt compile`, not `dbt parse`), with `type` derived via `sigma_data_models.map_type()`.
     arguments:
       - name: key
         type: string
@@ -51,21 +51,21 @@ macros:
         description: Table description.
       - name: primary_key
         type: string
-        description: Name of the column to mark with `semantic='key'`, unless that column already sets its own `semantic`.
+        description: Name of the column to mark with `semantic='key'`, unless that column already sets its own `semantic`. Matched case-insensitively against column names, which are always lowercased. Must match an actual column name, or a compiler error is raised.
       - name: columns
         type: list
-        description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated from the live relation via `adapter.get_columns_in_relation` (requires a connection).
+        description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated from the live relation via `adapter.get_columns_in_relation` (requires a connection). Column names must be unique within a table; a duplicate raises a compiler error.
       - name: metrics
         type: list | dict
-        description: "Either a dict mapping metric name to expression, or a list of `sigma_data_models.metric(...)` specs."
+        description: "Either a dict mapping metric name to expression, or a list of `sigma_data_models.metric(...)` specs. Metric names must be unique within a table; a duplicate raises a compiler error."
 
   - name: column
     description: |
-      A column on a `sigma_data_models.table()`. Only needed for overrides — bare strings in `sigma_data_models.table(columns=[...])` are sufficient when no override is needed.
+      A column on a `sigma_data_models.table()`. Only needed for overrides — bare strings in `sigma_data_models.table(columns=[...])` are sufficient when no override is needed. Always lowercases `name`.
     arguments:
       - name: name
         type: string
-        description: Column name.
+        description: Column name. Lowercased regardless of input casing.
       - name: display_name
         type: string
         description: Sigma display name. Defaults to a title-cased version of `name`.
@@ -81,6 +81,9 @@ macros:
       - name: description
         type: string
         description: Column description.
+      - name: type
+        type: string
+        description: Normalized type, e.g. `'text'`/`'number'`/`'boolean'`/`'date'`/`'datetime'`/`'variant'`. No default - only auto-populated columns get one set automatically, via `sigma_data_models.map_type()`.
 
   - name: metric
     description: |
@@ -101,7 +104,7 @@ macros:
 
   - name: relationship
     description: |
-      A join between two `sigma_data_models.table()`s. Only needed to set `type`/`name` — a bare `(from, from_column, to, to_column)` tuple passed to `sigma_data_models.model(relationships=...)` is sufficient otherwise.
+      A join between two `sigma_data_models.table()`s. Only needed to set `join_type`/`name` — a bare `(from, from_column, to, to_column)` tuple passed to `sigma_data_models.model(relationships=...)` is sufficient otherwise. Element id is frozen off `from`/`to`/`from_column`/`to_column` together, so two relationships between the same table pair on the same `from_column` but a different `to_column` don't collide.
     arguments:
       - name: from
         type: string
@@ -115,16 +118,16 @@ macros:
       - name: to_column
         type: string
         description: Join column on the target table.
-      - name: type
+      - name: join_type
         type: string
-        description: Join type. Default `'left'`.
+        description: Join type, e.g. `'left'`/`'inner'`. Default `'left'`. Distinct from `sigma_data_models.column()`'s `type`, which is a data type, not a join type; still emitted as `type` in the compiled spec.
       - name: name
         type: string
         description: Relationship display name.
 
   - name: materialize
     description: |
-      Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`.
+      Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`. Replaces `meta` wholesale rather than merging it - other `meta` keys set on the same model (directly or via `dbt_project.yml`) will be dropped.
     arguments:
       - name: spec
         type: dict
@@ -135,11 +138,19 @@ macros:
 
   - name: freeze_id
     description: |
-      Returns `local_md5(path)` for a path built from stable authoring keys (table key, column name, etc). Same path in, same id out, on every compile — the id only changes if the underlying key/name is renamed. Used internally by `sigma_data_models.table()`/`sigma_data_models.relationship()`; not normally called directly.
+      Returns `local_md5(path)` for a stable path string. Same path in, same id out, on every compile — the id only changes if the underlying path (a table's `database.schema.identifier` for table/column/metric ids, or a relationship's `from`/`to`/`from_column`/`to_column`) is renamed. Used internally by `sigma_data_models.table()`/`sigma_data_models.relationship()`; not normally called directly.
     arguments:
       - name: path
         type: string
-        description: Stable path string to hash, e.g. `'table:' ~ key`.
+        description: Stable path string to hash, e.g. `'table:' ~ identifier_path`.
+
+  - name: map_type
+    description: |
+      Best-effort bucketing of an adapter's raw SQL type string (e.g. Snowflake's `NUMBER(38,0)`, DuckDB's `BIGINT`) into a normalized Sigma-ish type - one of `text`/`number`/`boolean`/`date`/`datetime`/`variant`. Numeric matching is done against the leading type token (`'bigint'` from `'BIGINT'`, `'numeric'` from `'NUMERIC(38,2)'`), not a raw substring, so unrelated types like `INTERVAL` aren't misbucketed as `number` just for containing "int". Used internally by `sigma_data_models.table()` to set `type` on auto-populated columns; not normally called directly. Pass `type=` explicitly to `sigma_data_models.column()` to override.
+    arguments:
+      - name: data_type
+        type: string
+        description: Raw SQL type string from the adapter, e.g. `column.data_type` from `adapter.get_columns_in_relation()`.
 
   - name: titleize
     description: |

@@ -28,4 +28,24 @@ echo "4. Parsing to verify the compiled Sigma spec (no partial parse)..."
 dbt parse --profile sigma_integration_tests_duckdb --no-partial-parse
 
 echo ""
+echo "5. Asserting on the shape of composed specs..."
+dbt run-operation assert_sigma_spec --profile sigma_integration_tests_duckdb
+
+echo ""
+echo "6. Asserting invalid inputs are rejected..."
+NEGATIVE_MACROS="assert_duplicate_column_rejected assert_duplicate_metric_rejected assert_duplicate_table_key_rejected assert_unknown_relationship_from_rejected assert_unknown_relationship_to_rejected assert_invalid_primary_key_rejected"
+for macro in $NEGATIVE_MACROS; do
+  set +e
+  dbt run-operation "$macro" --profile sigma_integration_tests_duckdb > /tmp/sigma_negative_check.log 2>&1
+  NEGATIVE_EXIT=$?
+  set -e
+  if [ $NEGATIVE_EXIT -eq 0 ]; then
+    echo "Expected $macro to raise a compiler error, but it compiled successfully:"
+    cat /tmp/sigma_negative_check.log
+    exit 1
+  fi
+  echo "$macro was correctly rejected."
+done
+
+echo ""
 echo "=== All tests passed! ==="
