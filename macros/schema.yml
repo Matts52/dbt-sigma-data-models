@@ -1,0 +1,150 @@
+version: 2
+
+macros:
+  - name: model
+    description: |
+      Top-level Sigma data model. Composes tables and relationships into the spec that `sigma_data_models.materialize()` attaches to a dbt model's `meta` config.
+    arguments:
+      - name: name
+        type: string
+        description: Sigma data model name.
+      - name: tables
+        type: list
+        description: List of `sigma_data_models.table(...)` specs (or dicts) that make up the data model.
+      - name: relationships
+        type: list
+        description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`.
+      - name: page_name
+        type: string
+        description: Sigma page name. Defaults to `name`.
+      - name: connection_id
+        type: string
+        description: Sigma connection id. Defaults to the `sigma_connection_id` project var.
+      - name: folder_id
+        type: string
+        description: Sigma folder id. Defaults to the `sigma_folder_id` project var.
+      - name: data_model_id
+        type: string
+        description: Existing Sigma data model id, once known. No default — `none` until assigned by Sigma on first creation.
+
+  - name: table
+    description: |
+      A Sigma table within a data model. Freezes element ids for the table and each of its columns/metrics via `sigma_data_models.freeze_id()`, and can auto-populate `columns` from the live warehouse relation when omitted (requires `dbt run`/`dbt compile`, not `dbt parse`).
+    arguments:
+      - name: key
+        type: string
+        description: Stable authoring key for the table, used to freeze its element id and as the default `identifier`/`element_name` source.
+      - name: identifier
+        type: string
+        description: dbt model/relation name to bind to. Defaults to `key`.
+      - name: database
+        type: string
+        description: Defaults to `target.database`.
+      - name: schema
+        type: string
+        description: Defaults to `target.schema`.
+      - name: element_name
+        type: string
+        description: Sigma display name for the table. Defaults to a title-cased version of `key`.
+      - name: description
+        type: string
+        description: Table description.
+      - name: primary_key
+        type: string
+        description: Name of the column to mark with `semantic='key'`, unless that column already sets its own `semantic`.
+      - name: columns
+        type: list
+        description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated from the live relation via `adapter.get_columns_in_relation` (requires a connection).
+      - name: metrics
+        type: list | dict
+        description: "Either a dict mapping metric name to expression, or a list of `sigma_data_models.metric(...)` specs."
+
+  - name: column
+    description: |
+      A column on a `sigma_data_models.table()`. Only needed for overrides — bare strings in `sigma_data_models.table(columns=[...])` are sufficient when no override is needed.
+    arguments:
+      - name: name
+        type: string
+        description: Column name.
+      - name: display_name
+        type: string
+        description: Sigma display name. Defaults to a title-cased version of `name`.
+      - name: semantic
+        type: string
+        description: Sigma semantic type override, e.g. `'key'`.
+      - name: hidden
+        type: boolean
+        description: Whether the column is hidden in Sigma. Default `false`.
+      - name: group
+        type: string
+        description: Sigma column group.
+      - name: description
+        type: string
+        description: Column description.
+
+  - name: metric
+    description: |
+      A metric on a `sigma_data_models.table()`. Only needed for a `display_name`/`description` override — a plain `{name: expression}` dict entry in `sigma_data_models.table(metrics=...)` is sufficient otherwise.
+    arguments:
+      - name: name
+        type: string
+        description: Metric name.
+      - name: expression
+        type: string
+        description: Sigma metric expression, e.g. `'CountDistinct([account_guid])'`.
+      - name: display_name
+        type: string
+        description: Sigma display name. Defaults to a title-cased version of `name`.
+      - name: description
+        type: string
+        description: Metric description.
+
+  - name: relationship
+    description: |
+      A join between two `sigma_data_models.table()`s. Only needed to set `type`/`name` — a bare `(from, from_column, to, to_column)` tuple passed to `sigma_data_models.model(relationships=...)` is sufficient otherwise.
+    arguments:
+      - name: from
+        type: string
+        description: Key of the source table.
+      - name: from_column
+        type: string
+        description: Join column on the source table.
+      - name: to
+        type: string
+        description: Key of the target table.
+      - name: to_column
+        type: string
+        description: Join column on the target table.
+      - name: type
+        type: string
+        description: Join type. Default `'left'`.
+      - name: name
+        type: string
+        description: Relationship display name.
+
+  - name: materialize
+    description: |
+      Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`.
+    arguments:
+      - name: spec
+        type: dict
+        description: The dict returned by `sigma_data_models.model(...)`.
+      - name: materialized
+        type: string
+        description: Materialization for the underlying (inert) model. Default `'view'`.
+
+  - name: freeze_id
+    description: |
+      Returns `local_md5(path)` for a path built from stable authoring keys (table key, column name, etc). Same path in, same id out, on every compile — the id only changes if the underlying key/name is renamed. Used internally by `sigma_data_models.table()`/`sigma_data_models.relationship()`; not normally called directly.
+    arguments:
+      - name: path
+        type: string
+        description: Stable path string to hash, e.g. `'table:' ~ key`.
+
+  - name: titleize
+    description: |
+      Converts `snake_case`/`kebab-case` strings to a title-cased display string, e.g. `account_guid` -> `Account Guid`. Used internally to derive default `display_name`/`element_name` values; not normally called directly.
+    arguments:
+      - name: value
+        type: string
+        description: String to title-case.

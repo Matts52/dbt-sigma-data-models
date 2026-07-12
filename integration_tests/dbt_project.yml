@@ -1,0 +1,11 @@
+name: 'sigma_integration_tests'
+version: '1.0.0'
+config-version: 2
+profile: 'sigma_integration_tests_duckdb'
+
+model-paths: ["models"]
+seed-paths: ["seeds"]
+
+vars:
+  sigma_connection_id: 17edf046-9636-4d9b-a13f-d034bec2d600
+  sigma_folder_id: e7c79c61-94d4-458e-ab4c-f581a4c04a4c

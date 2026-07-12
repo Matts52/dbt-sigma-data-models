@@ -1,0 +1,21 @@
+sigma_integration_tests_snowflake:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: dummy_account
+      user: dummy_user
+      password: dummy_password
+      role: dummy_role
+      database: dummy_database
+      warehouse: dummy_warehouse
+      schema: dummy_schema
+      threads: 1
+
+sigma_integration_tests_duckdb:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../duckdb/integration_tests.duckdb"
+      schema: main

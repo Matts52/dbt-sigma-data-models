@@ -1,0 +1,14 @@
+version: 2
+
+exposures:
+  - name: territory_carving_demo
+    type: analysis
+    maturity: high
+    url: https://app.sigmacomputing.com/
+    owner:
+      name: Data Team
+      email: data@example.com
+    depends_on:
+      - ref('stg_accounts')
+      - ref('stg_employees')
+      - ref('sigma_territory_carving_demo')

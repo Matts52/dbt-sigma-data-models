@@ -1,0 +1,9 @@
+target/
+dbt_packages/
+logs/
+duckdb/
+.DS_Store
+*.log
+package-lock.yml
+.user.yml
+scratch/
