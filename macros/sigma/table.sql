@@ -25,6 +25,14 @@
   {% for relation_column in adapter.get_columns_in_relation(relation) %}
     {% do columns.append(relation_column.name) %}
   {% endfor %}
+  {% if not columns %}
+    {% do exceptions.raise_compiler_error(
+      "sigma_data_models.table('" ~ key ~ "'): auto-populating columns from " ~
+      database ~ "." ~ schema ~ "." ~ identifier ~ " found none - the relation likely doesn't " ~
+      "exist yet (check `identifier`/`database`/`schema`, and that it's been built) or has no " ~
+      "columns."
+    ) %}
+  {% endif %}
 {% endif %}
 
 {% set frozen_columns = [] %}

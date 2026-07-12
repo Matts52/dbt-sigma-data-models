@@ -265,3 +265,7 @@
 {% do sigma_data_models.table('bad_filter_check', identifier='accounts', columns=['account_guid'],
   filters=[sigma_data_models.filter('not_a_real_column', kind='list', options={'mode': 'include', 'values': ['x']})]) %}
 {% endmacro %}
+
+{% macro assert_nonexistent_relation_rejected() %}
+{% do sigma_data_models.table('typo_check', identifier='accounts_typo') %}
+{% endmacro %}
