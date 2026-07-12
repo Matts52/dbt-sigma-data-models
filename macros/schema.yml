@@ -13,7 +13,7 @@ macros:
         description: List of `sigma_data_models.table(...)` specs that make up the data model's one page. Table `key`s must be unique within this call - a duplicate raises a compiler error, since `relationships` resolves `from`/`to` against them.
       - name: relationships
         type: list
-        description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`. Each `from`/`to` must reference a `key` present in `tables`, and each `from_column`/`to_column` must be an actual column on that table - all four raise a compiler error otherwise.
+        description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`. Each `from`/`to` must reference a `key` present in `tables`, and each `from_column`/`to_column` must be an actual column on that table - all four raise a compiler error otherwise. The same `(from, from_column, to, to_column)` combination can't be passed twice; a duplicate raises a compiler error.
       - name: page_name
         type: string
         description: Sigma page name. Defaults to `name`.
@@ -51,10 +51,10 @@ macros:
         description: "Either a dict mapping metric name to formula, or a list of `sigma_data_models.metric(...)` specs. Metric names must be unique within a table; a duplicate raises a compiler error. Omitted entirely from the emitted table when empty, rather than an empty list."
       - name: folders
         type: list
-        description: List of `sigma_data_models.folder(...)` specs, grouping named subsets of `columns` for display - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Omitted entirely from the emitted table when empty.
+        description: List of `sigma_data_models.folder(...)` specs, grouping named subsets of `columns` for display - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Omitted entirely from the emitted table when empty. Folder names must be unique within a table; a duplicate raises a compiler error.
       - name: filters
         type: list
-        description: List of `sigma_data_models.filter(...)` specs. Omitted entirely from the emitted table when empty.
+        description: List of `sigma_data_models.filter(...)` specs. Omitted entirely from the emitted table when empty. A table can only have one filter per column/kind pair; a duplicate raises a compiler error.
 
   - name: column
     description: |

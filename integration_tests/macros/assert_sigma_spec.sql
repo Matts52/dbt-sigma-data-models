@@ -269,3 +269,33 @@
 {% macro assert_nonexistent_relation_rejected() %}
 {% do sigma_data_models.table('typo_check', identifier='accounts_typo') %}
 {% endmacro %}
+
+{% macro assert_duplicate_folder_rejected() %}
+{% do sigma_data_models.table('dup_folder_check', identifier='accounts', columns=['account_guid', 'account_owner_user_guid'],
+  folders=[
+    sigma_data_models.folder('Identifiers', columns=['account_guid']),
+    sigma_data_models.folder('Identifiers', columns=['account_owner_user_guid']),
+  ]) %}
+{% endmacro %}
+
+{% macro assert_duplicate_filter_rejected() %}
+{% do sigma_data_models.table('dup_filter_check', identifier='accounts', columns=['account_guid'],
+  filters=[
+    sigma_data_models.filter('account_guid', kind='list', options={'mode': 'include', 'values': ['a1']}),
+    sigma_data_models.filter('account_guid', kind='list', options={'mode': 'exclude', 'values': ['a2']}),
+  ]) %}
+{% endmacro %}
+
+{% macro assert_duplicate_relationship_rejected() %}
+{% do sigma_data_models.model(
+  name='Duplicate Relationship Check',
+  tables=[
+    sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid', 'account_owner_user_guid']),
+    sigma_data_models.table('employees', identifier='employees', columns=['employee_guid']),
+  ],
+  relationships=[
+    ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
+    ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
+  ],
+) %}
+{% endmacro %}

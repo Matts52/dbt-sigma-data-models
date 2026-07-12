@@ -75,7 +75,12 @@
 {% endfor %}
 
 {% set frozen_folders = [] %}
+{% set folder_names = [] %}
 {% for folder in folders %}
+  {% if folder.name in folder_names %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate folder name '" ~ folder.name ~ "' - folder names must be unique within a table.") %}
+  {% endif %}
+  {% do folder_names.append(folder.name) %}
   {% set items = [] %}
   {% for column_name in folder.columns %}
     {% set column_name = column_name | lower %}
@@ -92,12 +97,18 @@
 {% endfor %}
 
 {% set frozen_filters = [] %}
+{% set filter_keys = [] %}
 {% for filter in filters %}
   {% if filter.column not in column_ids %}
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): filter references unknown column '" ~ filter.column ~ "' - must be one of " ~ (column_ids.keys() | list)) %}
   {% endif %}
+  {% set filter_key = filter.column ~ '.' ~ filter.kind %}
+  {% if filter_key in filter_keys %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate filter '" ~ filter_key ~ "' - a table can only have one filter per column/kind pair.") %}
+  {% endif %}
+  {% do filter_keys.append(filter_key) %}
   {% set frozen_filter = {
-    "id": sigma_data_models.freeze_id('filter:' ~ identifier_path ~ '.' ~ filter.column ~ '.' ~ filter.kind),
+    "id": sigma_data_models.freeze_id('filter:' ~ identifier_path ~ '.' ~ filter_key),
     "columnId": column_ids[filter.column],
     "kind": filter.kind,
   } %}

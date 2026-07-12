@@ -13,6 +13,7 @@
    model level), and reference the target table by its real element id - both of which are
    only knowable once every table in this call has been composed, so resolution happens here
    rather than in sigma_data_models.relationship() itself. #}
+{% set relationship_keys = [] %}
 {% for rel in relationships %}
   {% set rel = sigma_data_models.relationship(*rel) if rel is sequence and rel is not mapping and rel is not string else rel %}
   {% if rel.from not in table_keys %}
@@ -30,6 +31,10 @@
     {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): relationship references unknown column '" ~ rel.to_column ~ "' on table '" ~ rel.to ~ "' - must be one of " ~ (target_table._column_ids.keys() | list)) %}
   {% endif %}
   {% set relationship_key = rel.from ~ '_to_' ~ rel.to ~ '_' ~ rel.from_column ~ '_' ~ rel.to_column %}
+  {% if relationship_key in relationship_keys %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): duplicate relationship '" ~ relationship_key ~ "' - the same from/from_column/to/to_column combination was passed more than once.") %}
+  {% endif %}
+  {% do relationship_keys.append(relationship_key) %}
   {% set relationship_entry = {
     "id": sigma_data_models.freeze_id('relationship:' ~ relationship_key),
     "targetElementId": target_table.id,
