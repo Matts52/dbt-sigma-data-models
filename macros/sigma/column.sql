@@ -1,12 +1,12 @@
-{% macro column(name, display_name=none, semantic=none, hidden=false, group=none, description=none, type=none) %}
-{% set name = name | lower %}
+{# Normalizes a column into an intent descriptor - `sigma_data_models.table()` resolves this
+   into the real Sigma column shape ({id, formula} for a passthrough column bound to the
+   warehouse, {id, formula, name} for a calculated one), since that requires table-level
+   context (identifier_path for the id, the table's identifier for the default formula) that
+   isn't available here. #}
+{% macro column(name, formula=none, display_name=none) %}
 {% do return({
-  "name": name,
-  "display_name": display_name or sigma_data_models.titleize(name),
-  "semantic": semantic,
-  "hidden": hidden,
-  "group": group,
-  "description": description,
-  "type": type,
+  "name": name | lower,
+  "formula": formula,
+  "display_name": display_name,
 }) %}
 {% endmacro %}

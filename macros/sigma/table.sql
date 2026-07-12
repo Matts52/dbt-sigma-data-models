@@ -1,8 +1,8 @@
-{% macro table(key, identifier=none, database=none, schema=none, element_name=none, description=none, primary_key=none, columns=[], metrics=[]) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[]) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
-{% set primary_key = primary_key | lower if primary_key else none %}
+{% set connection_id = connection_id or var('sigma_connection_id', none) %}
 {# Element ids are frozen off the physical db.schema.identifier a table is bound to, not
    `key` - `key` is only a local label used to wire relationships within one sigma.model()
    call, so the same `key` can be reused across separate models without id collisions.
@@ -10,41 +10,32 @@
    without this, the same physical table could freeze to different ids depending on which
    casing a caller (or environment) happens to pass in. #}
 {% set identifier_path = (database ~ '.' ~ schema ~ '.' ~ identifier) | lower %}
-{% if not columns %}
-  {% if not execute %}
-    {% do exceptions.raise_compiler_error(
-      "sigma_data_models.table('" ~ key ~ "'): columns were left empty, which auto-populates them from " ~
-      database ~ "." ~ schema ~ "." ~ identifier ~ " - that requires a live connection, so it " ~
-      "only works under `dbt run`/`dbt compile`, not `dbt parse`. Pass `columns` explicitly to " ~
-      "compile without a connection."
-    ) %}
-  {% endif %}
-  {% set relation = api.Relation.create(database=database, schema=schema, identifier=identifier) %}
-  {% set columns = [] %}
-  {% for column in adapter.get_columns_in_relation(relation) %}
-    {% do columns.append(sigma_data_models.column(column.name, type=sigma_data_models.map_type(column.data_type))) %}
-  {% endfor %}
-{% endif %}
+
 {% set frozen_columns = [] %}
-{% set column_names = [] %}
+{% set column_ids = {} %}
 {% for column in columns %}
   {% set column = sigma_data_models.column(column) if column is string else column %}
-  {% if column.name in column_names %}
+  {% if column.name in column_ids %}
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate column name '" ~ column.name ~ "' - column names must be unique within a table.") %}
   {% endif %}
-  {% do column_names.append(column.name) %}
-  {% set frozen_column = column.copy() %}
-  {% do frozen_column.update({
-    "element_id": sigma_data_models.freeze_id('column:' ~ identifier_path ~ '.' ~ column.name),
-    "semantic": column.semantic or ('key' if column.name == primary_key else none),
-  }) %}
-  {% do frozen_columns.append(frozen_column) %}
+  {% set column_id = sigma_data_models.freeze_id('column:' ~ identifier_path ~ '.' ~ column.name) %}
+  {% do column_ids.update({column.name: column_id}) %}
+  {# A passthrough column (no explicit `formula`) is bound directly to the warehouse column via
+     a `[TableIdentifier/Column Display Name]` formula reference, and carries no `name` field -
+     matching Sigma's own representation of an unmodified source column. Passing `formula`
+     explicitly makes it a calculated column instead, which does carry a `name`. #}
+  {% set entry = {
+    "id": column_id,
+    "formula": column.formula or ('[' ~ identifier ~ '/' ~ sigma_data_models.titleize(column.name) ~ ']'),
+  } %}
+  {% if column.formula %}
+    {% do entry.update({"name": column.display_name or sigma_data_models.titleize(column.name)}) %}
+  {% endif %}
+  {% do frozen_columns.append(entry) %}
 {% endfor %}
-{% if primary_key and primary_key not in column_names %}
-  {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): primary_key '" ~ primary_key ~ "' does not match any column name - must be one of " ~ column_names) %}
-{% endif %}
-{% set metrics_is_mapping = metrics is mapping %}
+
 {% set frozen_metrics = [] %}
+{% set metrics_is_mapping = metrics is mapping %}
 {% set metric_names = [] %}
 {% for metric in (metrics.items() if metrics_is_mapping else metrics) %}
   {% set metric = sigma_data_models.metric(metric[0], metric[1]) if metrics_is_mapping else metric %}
@@ -52,20 +43,73 @@
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate metric name '" ~ metric.name ~ "' - metric names must be unique within a table.") %}
   {% endif %}
   {% do metric_names.append(metric.name) %}
-  {% set frozen_metric = metric.copy() %}
-  {% do frozen_metric.update({"element_id": sigma_data_models.freeze_id('metric:' ~ identifier_path ~ '.' ~ metric.name)}) %}
-  {% do frozen_metrics.append(frozen_metric) %}
+  {% do frozen_metrics.append({
+    "id": sigma_data_models.freeze_id('metric:' ~ identifier_path ~ '.' ~ metric.name),
+    "formula": metric.formula,
+    "name": metric.display_name or sigma_data_models.titleize(metric.name),
+  }) %}
 {% endfor %}
-{% do return({
+
+{% set frozen_folders = [] %}
+{% for folder in folders %}
+  {% set items = [] %}
+  {% for column_name in folder.columns %}
+    {% set column_name = column_name | lower %}
+    {% if column_name not in column_ids %}
+      {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): folder '" ~ folder.name ~ "' references unknown column '" ~ column_name ~ "' - must be one of " ~ (column_ids.keys() | list)) %}
+    {% endif %}
+    {% do items.append(column_ids[column_name]) %}
+  {% endfor %}
+  {% do frozen_folders.append({
+    "id": sigma_data_models.freeze_id('folder:' ~ identifier_path ~ '.' ~ folder.name),
+    "name": folder.name,
+    "items": items,
+  }) %}
+{% endfor %}
+
+{% set frozen_filters = [] %}
+{% for filter in filters %}
+  {% if filter.column not in column_ids %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): filter references unknown column '" ~ filter.column ~ "' - must be one of " ~ (column_ids.keys() | list)) %}
+  {% endif %}
+  {% set frozen_filter = {
+    "id": sigma_data_models.freeze_id('filter:' ~ identifier_path ~ '.' ~ filter.column ~ '.' ~ filter.kind),
+    "columnId": column_ids[filter.column],
+    "kind": filter.kind,
+  } %}
+  {% do frozen_filter.update(filter.options) %}
+  {% do frozen_filters.append(frozen_filter) %}
+{% endfor %}
+
+{% set order = [] %}
+{% for column in frozen_columns %}
+  {% do order.append(column.id) %}
+{% endfor %}
+
+{# `key` and `_column_ids` are internal-only - sigma_data_models.model() reads `_column_ids` to
+   resolve relationship/folder column references, then strips both before emitting the final
+   Sigma element, since neither is a real field in Sigma's schema. #}
+{% set element = {
   "key": key,
-  "element_id": sigma_data_models.freeze_id('table:' ~ identifier_path),
-  "db": database,
-  "schema": schema,
-  "table": identifier,
-  "element_name": element_name or sigma_data_models.titleize(key),
-  "description": description,
-  "primary_key": primary_key,
+  "_column_ids": column_ids,
+  "id": sigma_data_models.freeze_id('table:' ~ identifier_path),
+  "kind": "table",
+  "source": {
+    "connectionId": connection_id,
+    "kind": "warehouse-table",
+    "path": [database, schema, identifier],
+  },
   "columns": frozen_columns,
-  "metrics": frozen_metrics,
-}) %}
+  "order": order,
+} %}
+{% if frozen_metrics %}
+  {% do element.update({"metrics": frozen_metrics}) %}
+{% endif %}
+{% if frozen_folders %}
+  {% do element.update({"folders": frozen_folders}) %}
+{% endif %}
+{% if frozen_filters %}
+  {% do element.update({"filters": frozen_filters}) %}
+{% endif %}
+{% do return(element) %}
 {% endmacro %}
