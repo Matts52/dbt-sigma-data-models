@@ -55,6 +55,9 @@ macros:
       - name: filters
         type: list
         description: List of `sigma_data_models.filter(...)` specs. Omitted entirely from the emitted table when empty. A table can only have one filter per column/kind pair; a duplicate raises a compiler error.
+      - name: display_name
+        type: string
+        description: Sigma display name for this table element. Defaults to a title-cased version of `key` (e.g. `'employees'` → `'Employees'`). Pass explicitly to override when the key's title-cased form isn't the desired label.
 
   - name: column
     description: |

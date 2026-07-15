@@ -66,6 +66,15 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: source.path[2] must be the bound identifier') %}
 {% endif %}
 
+{# Table element name: defaults to titleize(key), or explicit display_name when supplied. #}
+{% if accounts_element.name != 'Accounts Shape Check' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: table name must default to titleize(key), got '" ~ accounts_element.name ~ "'") %}
+{% endif %}
+{% set named_table = sigma_data_models.table('named_check', identifier='accounts', columns=['account_guid'], display_name='Custom Label') %}
+{% if named_table.name != 'Custom Label' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: table display_name must pass through as name, got '" ~ named_table.name ~ "'") %}
+{% endif %}
+
 {# Passthrough column shape: {id, formula} only - no `name` key, matching
    example-representation-data-model-with-a-single-table.md. #}
 {% set passthrough_column = accounts_element.columns[0] %}

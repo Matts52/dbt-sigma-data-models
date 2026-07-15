@@ -1,4 +1,4 @@
-{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[]) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
@@ -139,6 +139,7 @@
   "_column_ids": column_ids,
   "id": sigma_data_models.freeze_id('table:' ~ freeze_scope),
   "kind": "table",
+  "name": display_name or sigma_data_models.titleize(key),
   "source": {
     "connectionId": connection_id,
     "kind": "warehouse-table",
