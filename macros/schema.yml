@@ -42,7 +42,7 @@ macros:
         description: Defaults to `target.schema`.
       - name: connection_id
         type: string
-        description: Sigma connection id for this table's `source`. Defaults to the `sigma_connection_id` project var.
+        description: Sigma connection id for this table's `source`. Defaults to the `sigma_connection_id` project var. Required — raises a compiler error if neither is set.
       - name: columns
         type: list
         description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated as passthrough columns from the live relation via `adapter.get_columns_in_relation` (requires a connection - raises a clear compiler error under `dbt parse`, and also if the relation is found but has no columns, e.g. a nonexistent relation). Column names must be unique within a table; a duplicate raises a compiler error.
@@ -105,7 +105,7 @@ macros:
         description: Column name on the target table. Must be an actual column on that table, or `sigma_data_models.model()` raises a compiler error.
       - name: name
         type: string
-        description: Relationship display name.
+        description: Relationship display name. Defaults to `titleize(from) ~ ' → ' ~ titleize(to)`.
 
   - name: folder
     description: |
