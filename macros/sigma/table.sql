@@ -47,6 +47,28 @@
   {% if column.name in column_ids %}
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate column name '" ~ column.name ~ "' - column names must be unique within a table.") %}
   {% endif %}
+  {# Passthrough columns auto-generate a [identifier/Titleized Name] formula reference. Sigma's
+     formula parser rejects tokens that mix letters and digits (e.g. L30, S1, 50pct) — guard
+     here so the failure surfaces at compile time rather than as an opaque API rejection. #}
+  {% if not column.formula %}
+    {% for token in column.name.split('_') %}
+      {% if token %}
+        {% set ns = namespace(has_letter=false, has_digit=false) %}
+        {% for char in token %}
+          {% if char.isalpha() %}{% set ns.has_letter = true %}{% endif %}
+          {% if char.isdigit() %}{% set ns.has_digit = true %}{% endif %}
+        {% endfor %}
+        {% if ns.has_letter and ns.has_digit %}
+          {% do exceptions.raise_compiler_error(
+            "sigma_data_models.table('" ~ key ~ "'): passthrough column '" ~ column.name ~
+            "' title-cases to a formula reference containing '" ~ token.capitalize() ~
+            "', which mixes letters and digits — Sigma's formula parser cannot resolve it. " ~
+            "Supply an explicit formula= to sigma_data_models.column() to override, or omit this column."
+          ) %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+  {% endif %}
   {% set column_id = sigma_data_models.freeze_id('column:' ~ freeze_scope ~ '.' ~ column.name) %}
   {% do column_ids.update({column.name: column_id}) %}
   {# A passthrough column (no explicit `formula`) is bound directly to the warehouse column via

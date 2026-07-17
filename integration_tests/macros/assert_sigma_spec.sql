@@ -331,3 +331,7 @@
 {% do sigma_data_models.table('filter_reserved_key_check', identifier='accounts', columns=['account_guid'],
   filters=[sigma_data_models.filter('account_guid', kind='list', options={'kind': 'CLOBBERED'})]) %}
 {% endmacro %}
+
+{% macro assert_alphanumeric_column_rejected() %}
+{% do sigma_data_models.table('alphanumeric_column_check', identifier='accounts', columns=['active_paid_users_l30_days']) %}
+{% endmacro %}
