@@ -4,6 +4,10 @@ Compose [Sigma data models](https://help.sigmacomputing.com/docs/manage-data-mod
 
 The compiled shape follows Sigma's own documented [data model representation examples](https://help.sigmacomputing.com/docs/data-model-representation-example-library) as closely as this package's scope allows — see [Coverage](#coverage) for exactly what's modeled and what isn't, and `integration_tests/README.md` for which specific example each shape is checked against.
 
+## Adapter support
+
+All dbt adapters are supported. This package is purely compile-time JSON composition — the macros emit Sigma's spec into `config(meta=...)` with no adapter-specific SQL. A warehouse connection is only needed when `columns` are omitted from `sigma_data_models.table()` (column auto-population via `adapter.get_columns_in_relation`); with explicit `columns`, `dbt parse` alone is sufficient.
+
 ## Usage
 
 Define one dbt model per Sigma data model. The model's only job is to carry the compiled spec in its config; give it a trivial `select` body and a non-materializing config:
