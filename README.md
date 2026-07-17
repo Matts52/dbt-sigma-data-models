@@ -49,32 +49,221 @@ exposures:
 
 ## Macros
 
-| Macro | Purpose |
-| --- | --- |
-| `sigma_data_models.model(name, tables, relationships=[], page_name=none, folder_id=none, data_model_id=none)` | Top-level data model - one page, assembled from `tables`. |
-| `sigma_data_models.table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[])` | A Sigma table element bound to a warehouse relation. `identifier` is positional and defaults to `key`; `database`/`schema` default to the current target. |
-| `sigma_data_models.column(name, formula=none, display_name=none)` | A column. Only needed for a calculated column or a `display_name` override — see below. |
-| `sigma_data_models.metric(name, formula, display_name=none)` | A metric on a table. Only needed for a `display_name` override — see below. |
-| `sigma_data_models.relationship(from, from_column, to, to_column, name=none)` | A declared lineage link between two tables. Only needed for a `name` override — see below. |
-| `sigma_data_models.folder(name, columns)` | Groups a named subset of a table's columns for display. |
-| `sigma_data_models.filter(column, kind, options={})` | A filter on a table column. `kind`-specific fields go in `options`, verbatim. |
-| `sigma_data_models.materialize(spec, materialized='view')` | Wires a composed spec into the model's `config(meta=...)`. |
+### sigma_data_models.model
+([source](macros/sigma/model.sql))
 
-**`identifier`** is `sigma_data_models.table()`'s second positional arg, so `sigma_data_models.table('accounts', 'stg_accounts', ...)` works without spelling out `identifier=`. If the Sigma key and the dbt model name already match, skip it entirely — it defaults to `key`.
+Top-level data model — assembles one or more tables into a single Sigma page and resolves any declared relationships into their final nested shape.
 
-**Columns** can be bare strings — `columns=['account_guid', 'account_name']` — which produce a *passthrough* column bound directly to the warehouse column: `{id, formula: '[stg_accounts/Account Guid]'}`, with no `name` field, matching an unmodified source column in Sigma's own representation. Passing an explicit `formula` via `sigma_data_models.column(name, formula=...)` instead produces a *calculated* column — `{id, formula, name}` — for anything Sigma itself couldn't derive from the source column alone. Column names are always lowercased and must be unique within a table; a duplicate raises a compiler error rather than silently colliding on `id`.
+**Args:**
 
-Leaving `columns` off `sigma_data_models.table()` entirely (rather than passing bare strings) auto-populates every column as a passthrough column from the live warehouse relation (`adapter.get_columns_in_relation`) instead. This requires a real connection, so it only works under `dbt run`/`dbt compile` (where `execute` is true) — under connection-free `dbt parse`, a table with no `columns` raises a clear compiler error rather than silently compiling to zero columns. Pass `columns` explicitly to keep a table `dbt parse`-able without a connection. If the relation can't be found (wrong `identifier`/`database`/`schema`, or it just hasn't been built yet), auto-population raises a compiler error too, rather than silently compiling a table with zero columns.
+- `name` (required): Display name for the data model.
+- `tables` (required): List of `sigma_data_models.table()` calls to include on the page.
+- `relationships` (optional): List of relationship descriptors — either bare `(from, from_column, to, to_column)` tuples or `sigma_data_models.relationship()` calls. Default is `[]`.
+- `page_name` (optional): Display name for the page. Default is `none`.
+- `folder_id` (optional): Sigma folder id to publish into. Defaults to the `sigma_folder_id` project var.
+- `data_model_id` (optional): Sigma-assigned data model id for targeting an update instead of a create. Default is `none` — omit until you have the id from a first-time sync.
 
-**Metrics** can be a plain `{name: formula}` dict — `metrics={'count_accounts': 'CountDistinct([Account Guid])'}` — and `sigma_data_models.metric(...)` is only needed for a `display_name` override. Metric names must be unique within a table; a duplicate raises a compiler error.
+`key` must be unique across all entries in `tables` — it's what `relationships` resolves `from`/`to` against, so a duplicate is genuinely ambiguous and raises a compiler error.
 
-**Folders** group a table's own columns by name — `folders=[sigma_data_models.folder('Identifiers', columns=['account_guid'])]` — each `columns` entry must be an actual column on that table, or `sigma_data_models.table()` raises a compiler error. `metrics`/`folders`/`filters` are omitted entirely from the emitted table when empty, rather than emitted as an empty list, matching Sigma's own representations (which never show an empty `metrics`/`folders`/`filters` array on a table that doesn't have any). Folder names must be unique within a table; a duplicate raises a compiler error rather than silently colliding on `id`.
+**Usage:**
 
-**Filters** target a single column and pass their `kind`-specific fields straight through — `filters=[sigma_data_models.filter('account_industry', kind='list', options={'mode': 'include', 'values': ['Manufacturing']})]`. `options` uses Sigma's own field names directly (e.g. `min`/`max` for `kind='number-range'`, `mode`/`value`/`case` for `kind='text-match'`), so there's no per-`kind` macro surface to keep in sync with Sigma's filter types. `column` must be an actual column on that table, or `sigma_data_models.table()` raises a compiler error. A table can only have one filter per `column`/`kind` pair; a duplicate raises a compiler error rather than silently colliding on `id`. `options` can't set `id`/`columnId`/`kind` itself — those are already derived from `column`/`kind` and `sigma_data_models.table()` raises a compiler error rather than letting `options` silently overwrite them.
+```sql
+{% set spec = sigma_data_models.model(
+    name='Territory Carving',
+    tables=[
+      sigma_data_models.table('accounts', 'stg_accounts', columns=['account_guid', 'account_name']),
+      sigma_data_models.table('employees', 'stg_employees', columns=['employee_guid', 'employee_name']),
+    ],
+    relationships=[
+      ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
+    ],
+) %}
+```
 
-**Relationships** can be a bare `(from, from_column, to, to_column)` tuple — `sigma_data_models.relationship(...)` is only needed to set `name`. A relationship in Sigma is a declared lineage link (used for cross-table calculations), not a row-blending join — it has no join type. Sigma's actual join concept (`source.kind: "join"`, a distinct element that blends two tables' rows) isn't modeled by this package yet; see [Coverage](#coverage). `from`/`to` must reference a `key` present in the same `sigma_data_models.model()` call's `tables=[...]`, and `from_column`/`to_column` must be actual columns on those tables — any of these being wrong raises a compiler error rather than silently compiling a broken reference. The same `(from, from_column, to, to_column)` combination can't be passed twice; a duplicate raises a compiler error rather than silently colliding on `id`.
+---
 
-`sigma_data_models.model()` also requires `key` to be unique *within* one call's `tables=[...]` — unlike across separate models (see below), a duplicate here is genuinely ambiguous, since it's what `relationships=[...]` resolves `from`/`to` against, so it raises a compiler error.
+### sigma_data_models.table
+([source](macros/sigma/table.sql))
+
+A Sigma table element bound to a warehouse relation. Freezes deterministic ids for itself and all of its columns, metrics, folders, and filters.
+
+**Args:**
+
+- `key` (required): Unique name for this table within the model — used to resolve relationships and as the default `identifier`.
+- `identifier` (optional): The dbt model name (or warehouse table name) to bind to. Positional — `sigma_data_models.table('accounts', 'stg_accounts', ...)` works without spelling out `identifier=`. Defaults to `key`.
+- `database` (optional): Database override. Defaults to the current target database.
+- `schema` (optional): Schema override. Defaults to the current target schema.
+- `connection_id` (optional): Sigma connection id for this table. Defaults to the `sigma_connection_id` project var.
+- `columns` (optional): List of column descriptors — bare strings or `sigma_data_models.column()` calls. Default is `[]`.
+- `metrics` (optional): List of metric descriptors — plain `{name: formula}` dicts or `sigma_data_models.metric()` calls. Default is `[]`.
+- `folders` (optional): List of `sigma_data_models.folder()` calls. Default is `[]`.
+- `filters` (optional): List of `sigma_data_models.filter()` calls. Default is `[]`.
+
+Leaving `columns` off entirely (rather than passing an empty list) auto-populates every column as a passthrough from the live warehouse relation via `adapter.get_columns_in_relation`. This requires a real connection and only works under `dbt run`/`dbt compile` — under `dbt parse`, a table with no explicit `columns` raises a compiler error rather than silently compiling to zero columns. Pass `columns` explicitly to keep a model `dbt parse`-able without a connection.
+
+`metrics`/`folders`/`filters` are omitted from the emitted table when empty, matching Sigma's own representations, which never show empty arrays for these fields.
+
+**Usage:**
+
+```sql
+sigma_data_models.table(
+    'accounts',
+    'stg_accounts',
+    columns=['account_guid', 'account_name'],
+    metrics={'count_accounts': 'CountDistinct([Account Guid])'},
+    folders=[sigma_data_models.folder('Identifiers', columns=['account_guid'])],
+    filters=[sigma_data_models.filter('account_name', kind='text-match', options={'mode': 'includes', 'value': 'Acme', 'case': false})],
+)
+```
+
+---
+
+### sigma_data_models.column
+([source](macros/sigma/column.sql))
+
+A column descriptor. Only needed when adding a calculated column or overriding a column's display name — bare strings are sufficient for passthrough columns.
+
+Bare strings in `columns=[...]` produce a *passthrough* column: `{id, formula: '[stg_accounts/Account Guid]'}` with no `name` field, matching an unmodified source column in Sigma's own representation. Passing an explicit `formula` produces a *calculated* column: `{id, formula, name}`. Column names are always lowercased and must be unique within a table; a duplicate raises a compiler error.
+
+**Args:**
+
+- `name` (required): Column name (lowercased). Used as the display name and as the key for folder/filter references.
+- `formula` (optional): Sigma formula string. Omit for a passthrough column; provide for a calculated column. Default is `none`.
+- `display_name` (optional): Override the display name shown in Sigma. Default is `none` (derives from `name` via `titleize`).
+
+**Usage:**
+
+```sql
+-- passthrough (bare string, preferred when no formula or display_name override needed)
+columns=['account_guid', 'account_name']
+
+-- calculated column
+columns=[sigma_data_models.column('days_since_created', formula='DateDiff("day", [Created At], Now())')]
+
+-- display name override only
+columns=[sigma_data_models.column('account_guid', display_name='Account ID')]
+```
+
+---
+
+### sigma_data_models.metric
+([source](macros/sigma/metric.sql))
+
+A metric descriptor. Only needed when overriding a metric's display name — plain `{name: formula}` dicts are sufficient otherwise.
+
+Metric names must be unique within a table; a duplicate raises a compiler error.
+
+**Args:**
+
+- `name` (required): Metric name. Used as the key and default display name.
+- `formula` (required): Sigma formula string for the metric.
+- `display_name` (optional): Override the display name shown in Sigma. Default is `none` (derives from `name` via `titleize`).
+
+**Usage:**
+
+```sql
+-- plain dict (preferred when no display_name override needed)
+metrics={'count_accounts': 'CountDistinct([Account Guid])'}
+
+-- display name override
+metrics=[sigma_data_models.metric('count_accounts', formula='CountDistinct([Account Guid])', display_name='# Accounts')]
+```
+
+---
+
+### sigma_data_models.relationship
+([source](macros/sigma/relationship.sql))
+
+A declared lineage link between two tables in the same model. Only needed when overriding the relationship's display name — bare tuples are sufficient otherwise.
+
+A relationship in Sigma is a lineage link used for cross-table calculations, not a row-blending join (joins aren't modeled by this package — see [Coverage](#coverage)). `from`/`to` must reference a `key` present in the same `sigma_data_models.model()` call, and `from_column`/`to_column` must be actual columns on those tables — any mismatch raises a compiler error. The same `(from, from_column, to, to_column)` combination can't appear twice; a duplicate raises a compiler error.
+
+**Args:**
+
+- `from` (required): `key` of the source table.
+- `from_column` (required): Column name on the source table.
+- `to` (required): `key` of the target table.
+- `to_column` (required): Column name on the target table.
+- `name` (optional): Display name for the relationship. Default is `none`.
+
+**Usage:**
+
+```sql
+-- bare tuple (preferred when no name override needed)
+relationships=[
+  ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
+]
+
+-- named relationship
+relationships=[
+  sigma_data_models.relationship('accounts', 'account_owner_user_guid', 'employees', 'employee_guid', name='Account Owner'),
+]
+```
+
+---
+
+### sigma_data_models.folder
+([source](macros/sigma/folder.sql))
+
+Groups a named subset of a table's columns for display in Sigma. Each entry in `columns` must be an actual column on the table, or `sigma_data_models.table()` raises a compiler error. Folder names must be unique within a table; a duplicate raises a compiler error.
+
+**Args:**
+
+- `name` (required): Display name for the folder.
+- `columns` (required): List of column names (strings) to include in the folder — must all be actual columns on the table.
+
+**Usage:**
+
+```sql
+folders=[
+  sigma_data_models.folder('Identifiers', columns=['account_guid']),
+  sigma_data_models.folder('Attributes',  columns=['account_name', 'account_industry']),
+]
+```
+
+---
+
+### sigma_data_models.filter
+([source](macros/sigma/filter.sql))
+
+A filter on a table column. `kind`-specific fields are passed straight through in `options`, using Sigma's own field names directly — there's no per-`kind` macro surface to keep in sync with Sigma's filter types.
+
+`column` must be an actual column on the table, or `sigma_data_models.table()` raises a compiler error. A table can only have one filter per `column`/`kind` pair; a duplicate raises a compiler error. `options` cannot set `id`, `columnId`, or `kind` — those are derived from `column`/`kind` and attempting to override them raises a compiler error.
+
+**Args:**
+
+- `column` (required): Name of the column to filter on — must be an actual column on the table.
+- `kind` (required): Sigma filter type (e.g. `'list'`, `'text-match'`, `'number-range'`, `'date-range'`).
+- `options` (optional): Dict of `kind`-specific fields using Sigma's own field names (e.g. `min`/`max` for `'number-range'`, `mode`/`value`/`case` for `'text-match'`, `mode`/`values` for `'list'`). Default is `{}`.
+
+**Usage:**
+
+```sql
+filters=[
+  sigma_data_models.filter('account_industry', kind='list',         options={'mode': 'include', 'values': ['Manufacturing', 'Retail']}),
+  sigma_data_models.filter('employee_count',   kind='number-range', options={'min': 10, 'max': 500}),
+]
+```
+
+---
+
+### sigma_data_models.materialize
+([source](macros/sigma/materialize.sql))
+
+Wires a composed spec into the dbt model's `config(meta=...)` so it lands in `manifest.json` on `dbt parse`/`dbt compile`.
+
+Note that `config(meta=...)` replaces `meta` wholesale rather than merging — if the model or a `+meta:` block in `dbt_project.yml` sets other `meta` keys, calling `materialize()` will drop them. Keep these models single-purpose and set any other `meta` on a different model.
+
+**Args:**
+
+- `spec` (required): The composed spec returned by `sigma_data_models.model()`.
+- `materialized` (optional): dbt materialization for the model. Default is `'view'`.
+
+**Usage:**
+
+```sql
+{{ sigma_data_models.materialize(sigma_data_model) }}
+```
 
 ## Frozen element ids
 
