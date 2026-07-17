@@ -42,7 +42,7 @@
       "sourceColumnId": source_table._column_ids[rel.from_column],
       "targetColumnId": target_table._column_ids[rel.to_column],
     }],
-    "name": rel.name,
+    "name": rel.name or (sigma_data_models.titleize(rel.from) ~ ' → ' ~ sigma_data_models.titleize(rel.to)),
   } %}
   {% if 'relationships' not in source_table %}
     {% do source_table.update({"relationships": []}) %}

@@ -3,6 +3,12 @@
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
 {% set connection_id = connection_id or var('sigma_connection_id', none) %}
+{% if not connection_id and execute %}
+  {% do exceptions.raise_compiler_error(
+    "sigma_data_models.table('" ~ key ~ "'): connection_id is required but was not set. " ~
+    "Pass connection_id= to sigma_data_models.table(), or set the `sigma_connection_id` project variable in dbt_project.yml."
+  ) %}
+{% endif %}
 {# Element ids are frozen off `key` plus the physical db.schema.identifier a table is bound
    to - both, not just one. `key` alone would let two different physical tables collide if two
    models happened to reuse the same key; the identifier alone would let the same physical

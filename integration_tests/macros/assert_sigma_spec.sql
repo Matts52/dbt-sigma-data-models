@@ -107,7 +107,8 @@
 {% if dn_col.name != 'Account Owner ID' %}
   {% do exceptions.raise_compiler_error("assert_sigma_spec: a display_name-only column must use the display_name as its name, got '" ~ dn_col.name ~ "'") %}
 {% endif %}
-{% if dn_col.formula != '[accounts/Account Owner User Guid]' %}
+{% set expected_dn_formula = '[' ~ dn_table.source.path[2] ~ '/' ~ sigma_data_models.titleize('account_owner_user_guid') ~ ']' %}
+{% if dn_col.formula != expected_dn_formula %}
   {% do exceptions.raise_compiler_error("assert_sigma_spec: a display_name-only column's formula must still auto-generate to '[identifier/Titleized Name]', got " ~ dn_col.formula) %}
 {% endif %}
 
@@ -179,6 +180,10 @@
 {% endif %}
 {% if relationship['keys'][0].targetColumnId != employees_element.columns[0].id %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: relationship targetColumnId must be the resolved to_column id') %}
+{% endif %}
+{% set expected_rel_name = sigma_data_models.titleize('accounts_shape_check') ~ ' → ' ~ sigma_data_models.titleize('employees_shape_check') %}
+{% if relationship.name != expected_rel_name %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: relationship.name must default to titleize(from) ~ ' → ' ~ titleize(to) when no name is supplied, got '" ~ relationship.name ~ "'") %}
 {% endif %}
 
 {# freeze_id determinism: identical inputs must yield identical ids across independent calls. #}
