@@ -95,6 +95,22 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: a calculated column name must default to a title-cased version of its key') %}
 {% endif %}
 
+{# display_name-only passthrough: must emit {id, formula, name} with the given display_name,
+   not silently fall back to titleize(column.name). #}
+{% set dn_table = sigma_data_models.table('display_name_col_check', identifier='accounts', columns=[
+  sigma_data_models.column('account_owner_user_guid', display_name='Account Owner ID')
+]) %}
+{% set dn_col = dn_table.columns[0] %}
+{% if dn_col.keys() | list | sort != ['formula', 'id', 'name'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a display_name-only column must have exactly {id, formula, name}, got ' ~ (dn_col.keys() | list)) %}
+{% endif %}
+{% if dn_col.name != 'Account Owner ID' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: a display_name-only column must use the display_name as its name, got '" ~ dn_col.name ~ "'") %}
+{% endif %}
+{% if dn_col.formula != '[accounts/Account Owner User Guid]' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: a display_name-only column's formula must still auto-generate to '[identifier/Titleized Name]', got " ~ dn_col.formula) %}
+{% endif %}
+
 {# order must be exactly the column ids, in declaration order. #}
 {% set expected_order = [] %}
 {% for c in accounts_element.columns %}

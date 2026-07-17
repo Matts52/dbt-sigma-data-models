@@ -71,15 +71,16 @@
   {% endif %}
   {% set column_id = sigma_data_models.freeze_id('column:' ~ freeze_scope ~ '.' ~ column.name) %}
   {% do column_ids.update({column.name: column_id}) %}
-  {# A passthrough column (no explicit `formula`) is bound directly to the warehouse column via
-     a `[TableIdentifier/Column Display Name]` formula reference, and carries no `name` field -
-     matching Sigma's own representation of an unmodified source column. Passing `formula`
-     explicitly makes it a calculated column instead, which does carry a `name`. #}
+  {# A pure passthrough column (no `formula`, no `display_name`) carries only {id, formula},
+     matching Sigma's representation of an unmodified source column. Supplying `formula` OR
+     `display_name` (or both) promotes it to a calculated column shape {id, formula, name} -
+     a display_name-only column is effectively an identity calculated column (same formula,
+     just with a non-default label). #}
   {% set entry = {
     "id": column_id,
     "formula": column.formula or ('[' ~ identifier ~ '/' ~ sigma_data_models.titleize(column.name) ~ ']'),
   } %}
-  {% if column.formula %}
+  {% if column.formula or column.display_name %}
     {% do entry.update({"name": column.display_name or sigma_data_models.titleize(column.name)}) %}
   {% endif %}
   {% do frozen_columns.append(entry) %}
