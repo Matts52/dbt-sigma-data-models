@@ -9,10 +9,10 @@ macros:
         type: string
         description: Sigma data model name.
       - name: tables
-        type: list
+        type: list[any]
         description: List of `sigma_data_models.table(...)` specs that make up the data model's one page. Table `key`s must be unique within this call - a duplicate raises a compiler error, since `relationships` resolves `from`/`to` against them.
       - name: relationships
-        type: list
+        type: list[any]
         description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`. Each `from`/`to` must reference a `key` present in `tables`, and each `from_column`/`to_column` must be an actual column on that table - all four raise a compiler error otherwise. The same `(from, from_column, to, to_column)` combination can't be passed twice; a duplicate raises a compiler error.
       - name: page_name
         type: string
@@ -44,16 +44,16 @@ macros:
         type: string
         description: Sigma connection id for this table's `source`. Defaults to the `sigma_connection_id` project var. Required — raises a compiler error if neither is set.
       - name: columns
-        type: list
+        type: list[any]
         description: Bare column name strings and/or `sigma_data_models.column(...)` specs. Left empty, columns are auto-populated as passthrough columns from the live relation via `adapter.get_columns_in_relation` (requires a connection - raises a clear compiler error under `dbt parse`, and also if the relation is found but has no columns, e.g. a nonexistent relation). Column names must be unique within a table; a duplicate raises a compiler error.
       - name: metrics
-        type: list | dict
+        type: any
         description: "Either a dict mapping metric name to formula, or a list of `sigma_data_models.metric(...)` specs. Metric names must be unique within a table; a duplicate raises a compiler error. Omitted entirely from the emitted table when empty, rather than an empty list."
       - name: folders
-        type: list
+        type: list[any]
         description: List of `sigma_data_models.folder(...)` specs, grouping named subsets of `columns` for display - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Omitted entirely from the emitted table when empty. Folder names must be unique within a table; a duplicate raises a compiler error.
       - name: filters
-        type: list
+        type: list[any]
         description: List of `sigma_data_models.filter(...)` specs. Omitted entirely from the emitted table when empty. A table can only have one filter per column/kind pair; a duplicate raises a compiler error.
       - name: display_name
         type: string
@@ -115,7 +115,7 @@ macros:
         type: string
         description: Folder display name.
       - name: columns
-        type: list
+        type: list[string]
         description: Column names to group under this folder.
 
   - name: filter
@@ -129,7 +129,7 @@ macros:
         type: string
         description: Sigma filter kind, e.g. `'number-range'`/`'list'`/`'text-match'`.
       - name: options
-        type: dict
+        type: dict[string,any]
         description: "Kind-specific fields, passed through verbatim using Sigma's own field names, e.g. `{'mode': 'include', 'values': ['Manufacturing']}`. Default `{}`. Can't set `id`/`columnId`/`kind` - those are already derived from `column`/`kind`, and `sigma_data_models.table()` raises a compiler error rather than letting `options` silently overwrite them."
 
   - name: materialize
@@ -137,7 +137,7 @@ macros:
       Wires a composed `sigma_data_models.model(...)` spec into the dbt model's `config(meta=...)`, where it lands in `manifest.json` on `dbt parse`/`dbt compile`. Replaces `meta` wholesale rather than merging it - other `meta` keys set on the same model (directly or via `dbt_project.yml`) will be dropped.
     arguments:
       - name: spec
-        type: dict
+        type: dict[string,any]
         description: The dict returned by `sigma_data_models.model(...)`.
       - name: materialized
         type: string
