@@ -1,7 +1,7 @@
 name: 'sigma_data_models'
 version: '1.0.0'
 config-version: 2
-require-dbt-version: [">=1.6.0", "<2.0.0"]
+require-dbt-version: [">=1.6.0", "<3.0.0"]
 
 model-paths: ["models"]
 macro-paths: ["macros"]
