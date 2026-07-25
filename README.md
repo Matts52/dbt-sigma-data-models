@@ -75,6 +75,7 @@ Top-level data model — assembles one or more tables into a single Sigma page a
 - `name` (required): Display name for the data model.
 - `tables` (required): List of `sigma_data_models.table()` calls to include on the page.
 - `relationships` (optional): List of relationship descriptors — either bare `(from, from_column, to, to_column)` tuples or `sigma_data_models.relationship()` calls. Default is `[]`.
+- `controls` (optional): List of `sigma_data_models.control()` calls. Default is `[]`.
 - `page_name` (optional): Display name for the page. Default is `none`.
 - `folder_id` (optional): Sigma folder id to publish into. Defaults to the `sigma_folder_id` project var.
 - `data_model_id` (optional): Sigma-assigned data model id for targeting an update instead of a create. Default is `none` — omit until you have the id from a first-time sync.
@@ -87,13 +88,49 @@ Top-level data model — assembles one or more tables into a single Sigma page a
 {% set spec = sigma_data_models.model(
     name='Territory Carving',
     tables=[
-      sigma_data_models.table('accounts', 'stg_accounts', columns=['account_guid', 'account_name']),
+      sigma_data_models.table('accounts', 'stg_accounts', columns=['account_guid', 'account_name', 'account_industry']),
       sigma_data_models.table('employees', 'stg_employees', columns=['employee_guid', 'employee_name']),
     ],
     relationships=[
       ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
     ],
+    controls=[
+      sigma_data_models.control('industry_filter', type='value-list',
+        targets=[('accounts', 'account_industry')], display_name='Industry'),
+    ],
 ) %}
+```
+
+---
+
+### sigma_data_models.control
+([source](macros/sigma/control.sql))
+
+A page-level interactive filter element. Controls are siblings to table elements in `pages[].elements[]` — they're not nested inside a table. Each control targets one or more `(table_key, column_name)` pairs (resolved to real element/column ids at compile time) and lets workbook viewers filter those columns interactively.
+
+`name` becomes the `controlId` in the emitted spec — the stable identifier used to reference the control in Sigma formulas. `type` is passed verbatim as `controlType` (e.g. `'value-list'`, `'text'`, `'checkbox'`, `'switch'`, `'date-range'`, `'number-range'`). Control names must be unique within a model; a duplicate raises a compiler error. Each target table key and column name must be an actual key/column in the model; any mismatch raises a compiler error.
+
+**Args:**
+
+- `name` (required): Control key, used as `controlId` and to freeze its id. Lowercased. Must be unique within the model.
+- `type` (required): Sigma control type, passed verbatim as `controlType`.
+- `targets` (required): List of `(table_key, column_name)` tuples — each pair resolves to a `{source.elementId, columnId}` filter entry. Must be non-empty.
+- `display_name` (optional): Display name shown in Sigma. Default derives from `name` via `titleize`.
+- `page` (optional): Page to place the control on. Defaults to the page of the first target table.
+- `options` (optional): Control-type-specific fields passed through verbatim using Sigma's own field names (e.g. `{'mode': 'equals'}` for a text control). Cannot set `id`, `controlId`, `controlType`, `kind`, or `filters` — those are derived from the other args and attempting to override them raises a compiler error. Default is `{}`.
+
+**Usage:**
+
+```sql
+controls=[
+  -- single target
+  sigma_data_models.control('industry_filter', type='value-list',
+    targets=[('accounts', 'account_industry')], display_name='Industry'),
+
+  -- multi-target: same control drives two tables
+  sigma_data_models.control('segment_filter', type='value-list',
+    targets=[('accounts', 'account_segment'), ('leads', 'lead_segment')]),
+]
 ```
 
 ---
@@ -346,6 +383,8 @@ Modeled, matching Sigma's own [example representations](https://help.sigmacomput
 - Folders (named column groupings)
 - Filters (`kind`-specific fields passed through verbatim)
 - Column/metric `format` (number/datetime display formatting via `sigma_data_models.format()`)
+- Multi-page data models (assign tables to named pages via `page=` on `sigma_data_models.table()`; tables without `page=` land on the default page)
+- Controls (page-level interactive filter elements via `sigma_data_models.control()`, targeting one or more table columns; placed alongside table elements on their page)
 
 Not modeled - unsupported inputs are simply not exposed by these macros, so there's nothing to accidentally get wrong:
 
@@ -355,8 +394,6 @@ Not modeled - unsupported inputs are simply not exposed by these macros, so ther
 - Custom SQL sources (`source.kind: "sql"`)
 - Groupings (statistical `groupBy`, distinct from folders)
 - Column-level security (`columnSecurities`)
-- Multi-page data models (assign tables to named pages via `page=` on `sigma_data_models.table()`; tables without `page=` default to the first page)
-- Input controls (list values, text/number/date input, sliders, etc.) - these are page-level peer elements (`kind: "control"`), not part of a table's own composition
 
 ## Why a model instead of a plain YAML block
 
