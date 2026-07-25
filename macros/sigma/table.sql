@@ -1,4 +1,4 @@
-{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none) %}
+{% macro table(key, identifier=none, database=none, schema=none, connection_id=none, columns=[], metrics=[], folders=[], filters=[], display_name=none, page=none) %}
 {% set database = database or target.database %}
 {% set schema = schema or target.schema %}
 {% set identifier = identifier or key %}
@@ -160,9 +160,9 @@
   {% do order.append(column.id) %}
 {% endfor %}
 
-{# `key` and `_column_ids` are internal-only - sigma_data_models.model() reads `_column_ids` to
-   resolve relationship/folder column references, then strips both before emitting the final
-   Sigma element, since neither is a real field in Sigma's schema. #}
+{# `key`, `_column_ids`, and `_page` are internal-only - sigma_data_models.model() reads them to
+   resolve relationships/folders and group tables into pages, then strips all three before
+   emitting the final Sigma element, since none are real fields in Sigma's schema. #}
 {% set element = {
   "key": key,
   "_column_ids": column_ids,
@@ -186,5 +186,6 @@
 {% if frozen_filters %}
   {% do element.update({"filters": frozen_filters}) %}
 {% endif %}
+{% do element.update({"_page": page}) %}
 {% do return(element) %}
 {% endmacro %}

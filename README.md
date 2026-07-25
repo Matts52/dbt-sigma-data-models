@@ -310,7 +310,7 @@ Not modeled - unsupported inputs are simply not exposed by these macros, so ther
 - Groupings (statistical `groupBy`, distinct from folders)
 - Column-level security (`columnSecurities`)
 - Column/metric `format` (number/datetime display formatting)
-- Multi-page data models (`sigma_data_models.model()` always produces exactly one page)
+- Multi-page data models (assign tables to named pages via `page=` on `sigma_data_models.table()`; tables without `page=` default to the first page)
 - Input controls (list values, text/number/date input, sliders, etc.) - these are page-level peer elements (`kind: "control"`), not part of a table's own composition
 
 ## Why a model instead of a plain YAML block
