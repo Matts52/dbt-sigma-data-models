@@ -298,6 +298,23 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: multi-target control filter[1].source.elementId must resolve to the second target table') %}
 {% endif %}
 
+{# _resolve_table/_resolve_column_id helpers: verify they return the exact same ids that
+   table() froze, confirming the model() refactor didn't silently change any frozen values.
+   This matters because _resolve_column_id applies `| lower` to the column name before
+   lookup - the assertion guards against that (or any future change) accidentally producing
+   a different id than the one table() stored in _column_ids. #}
+{% set resolve_check_table = sigma_data_models.table('resolve_check', identifier='accounts',
+  columns=['account_guid', 'account_owner_user_guid']) %}
+{% set resolve_check_tby_key = {'resolve_check': resolve_check_table} %}
+{% set resolved_table = sigma_data_models._resolve_table('test', 'resolve_check', resolve_check_tby_key) %}
+{% if resolved_table.id != resolve_check_table.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: _resolve_table must return the same table dict (same id) as direct lookup') %}
+{% endif %}
+{% set resolved_col_id = sigma_data_models._resolve_column_id('test', 'resolve_check', resolve_check_table, 'account_guid') %}
+{% if resolved_col_id != resolve_check_table._column_ids['account_guid'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: _resolve_column_id must return the same frozen id as direct _column_ids lookup') %}
+{% endif %}
+
 {# freeze_id determinism: identical inputs must yield identical ids across independent calls. #}
 {% set model_spec_again = sigma_data_models.model(
   name='Shape Check',
