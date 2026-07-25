@@ -64,7 +64,7 @@ macros:
 
   - name: column
     description: |
-      Normalizes a column into an intent descriptor; `sigma_data_models.table()` resolves it into the real Sigma column shape, since that requires table-level context (the identifier path for the id, the table's identifier for the default formula) this macro doesn't have. Leaving `formula` unset produces a passthrough column bound directly to the warehouse column (`{id, formula}`, no `name`); passing `formula` produces a calculated column (`{id, formula, name}`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-calculated-column.
+      Normalizes a column into an intent descriptor; `sigma_data_models.table()` resolves it into the real Sigma column shape, since that requires table-level context (the identifier path for the id, the table's identifier for the default formula) this macro doesn't have. Leaving `formula` unset produces a passthrough column bound directly to the warehouse column (`{id, formula}`, no `name`); passing `formula` produces a calculated column (`{id, formula, name}`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-calculated-column. Adding `format` emits a `format` object on the element, controlling number/datetime display formatting - see https://help.sigmacomputing.com/docs/format-columns-and-metrics-in-the-code-representation-of-a-data-model.
     arguments:
       - name: name
         type: string
@@ -75,10 +75,13 @@ macros:
       - name: display_name
         type: string
         description: Sigma display name for a calculated column. Defaults to a title-cased version of `name`. Ignored for a passthrough column, which has no `name` field.
+      - name: format
+        type: dict[string,any]
+        description: "Display format for this column. Pass `sigma_data_models.format('number', {...})` or `sigma_data_models.format('datetime', {...})`, or a raw dict with at least a `kind` key set to `'number'` or `'datetime'`. Remaining fields (`formatString`, `decimalSymbol`, `digitGroupingSymbol`, `currencySymbol`, etc.) are passed through verbatim using Sigma's own field names. Omit (default `none`) to leave formatting at Sigma's default."
 
   - name: metric
     description: |
-      Normalizes a metric into an intent descriptor; `sigma_data_models.table()` resolves it into the real Sigma metric shape (`{id, formula, name}`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-metric. A plain dict entry (`{name: formula}`) in `sigma_data_models.table(metrics=...)` is sufficient when no `display_name` override is needed.
+      Normalizes a metric into an intent descriptor; `sigma_data_models.table()` resolves it into the real Sigma metric shape (`{id, formula, name}`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-table-and-a-metric. A plain dict entry (`{name: formula}`) in `sigma_data_models.table(metrics=...)` is sufficient when no `display_name` or `format` override is needed.
     arguments:
       - name: name
         type: string
@@ -89,6 +92,9 @@ macros:
       - name: display_name
         type: string
         description: Sigma display name. Defaults to a title-cased version of `name`.
+      - name: format
+        type: dict[string,any]
+        description: "Display format for this metric. Pass `sigma_data_models.format('number', {...})` or `sigma_data_models.format('datetime', {...})`, or a raw dict with at least a `kind` key set to `'number'` or `'datetime'`. Remaining fields are passed through verbatim. Omit (default `none`) to leave formatting at Sigma's default."
 
   - name: relationship
     description: |
@@ -134,6 +140,17 @@ macros:
       - name: options
         type: dict[string,any]
         description: "Kind-specific fields, passed through verbatim using Sigma's own field names, e.g. `{'mode': 'include', 'values': ['Manufacturing']}`. Default `{}`. Can't set `id`/`columnId`/`kind` - those are already derived from `column`/`kind`, and `sigma_data_models.table()` raises a compiler error rather than letting `options` silently overwrite them."
+
+  - name: format
+    description: |
+      Constructs a Sigma format object controlling number or datetime display formatting on a column or metric element - see https://help.sigmacomputing.com/docs/format-columns-and-metrics-in-the-code-representation-of-a-data-model. Validates that `kind` is one of `'number'` or `'datetime'` and merges `options` into the result. Pass the returned dict as `format=` to `sigma_data_models.column()` or `sigma_data_models.metric()`. A raw dict is also accepted there for callers who prefer to pass the Sigma format spec verbatim.
+    arguments:
+      - name: kind
+        type: string
+        description: "Format kind — must be `'number'` or `'datetime'`. Raises a compiler error otherwise."
+      - name: options
+        type: dict[string,any]
+        description: "Format-specific fields using Sigma's own field names. Allowed keys are validated at compile time — unsupported keys raise a compiler error. For `kind='number'`: `formatString`, `decimalSymbol`, `digitGroupingSymbol`, `digitGroupingSize`, `currencySymbol`. For `kind='datetime'`: `formatString` only. Default `{}`."
 
   - name: materialize
     description: |

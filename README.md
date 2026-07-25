@@ -263,6 +263,39 @@ filters=[
 
 ---
 
+### sigma_data_models.format
+([source](macros/sigma/format.sql))
+
+Constructs a Sigma format object controlling number or datetime display formatting on a column or metric. Pass the result as `format=` to `sigma_data_models.column()` or `sigma_data_models.metric()`. A raw dict is also accepted if you prefer to pass the Sigma format spec verbatim.
+
+**Args:**
+
+- `kind` (required): `'number'` or `'datetime'`. Any other value raises a compiler error.
+- `options` (optional): Dict of format-specific fields using Sigma's own field names. Keys are validated at compile time — unsupported keys raise a compiler error. For `kind='number'`: `formatString`, `decimalSymbol`, `digitGroupingSymbol`, `digitGroupingSize`, `currencySymbol`. For `kind='datetime'`: `formatString` only. Default is `{}`.
+
+**Usage:**
+
+```sql
+-- currency column
+columns=[
+  sigma_data_models.column('revenue', formula='[Revenue]',
+    format=sigma_data_models.format('number', {'formatString': '$.2f', 'currencySymbol': '$'})),
+]
+
+-- date column
+columns=[
+  sigma_data_models.column('created_at', format=sigma_data_models.format('datetime', {'formatString': 'MM/DD/YYYY'})),
+]
+
+-- metric
+metrics=[
+  sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])',
+    format=sigma_data_models.format('number', {'formatString': 'd'})),
+]
+```
+
+---
+
 ### sigma_data_models.materialize
 ([source](macros/sigma/materialize.sql))
 
@@ -312,6 +345,7 @@ Modeled, matching Sigma's own [example representations](https://help.sigmacomput
 - Relationships (declared lineage links, nested under their source table)
 - Folders (named column groupings)
 - Filters (`kind`-specific fields passed through verbatim)
+- Column/metric `format` (number/datetime display formatting via `sigma_data_models.format()`)
 
 Not modeled - unsupported inputs are simply not exposed by these macros, so there's nothing to accidentally get wrong:
 
@@ -321,7 +355,6 @@ Not modeled - unsupported inputs are simply not exposed by these macros, so ther
 - Custom SQL sources (`source.kind: "sql"`)
 - Groupings (statistical `groupBy`, distinct from folders)
 - Column-level security (`columnSecurities`)
-- Column/metric `format` (number/datetime display formatting)
 - Multi-page data models (assign tables to named pages via `page=` on `sigma_data_models.table()`; tables without `page=` default to the first page)
 - Input controls (list values, text/number/date input, sliders, etc.) - these are page-level peer elements (`kind: "control"`), not part of a table's own composition
 
