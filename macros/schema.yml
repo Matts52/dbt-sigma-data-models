@@ -16,7 +16,7 @@ macros:
         description: List of `sigma_data_models.relationship(...)` specs, or bare `(from, from_column, to, to_column)` tuples. Default `[]`. Each `from`/`to` must reference a `key` present in `tables`, and each `from_column`/`to_column` must be an actual column on that table - all four raise a compiler error otherwise. The same `(from, from_column, to, to_column)` combination can't be passed twice; a duplicate raises a compiler error.
       - name: page_name
         type: string
-        description: Sigma page name. Defaults to `name`.
+        description: Name for the default page — the page that tables without an explicit `page=` land on. Defaults to `name`. Has no effect when every table in the model sets `page=` explicitly.
       - name: folder_id
         type: string
         description: Sigma folder id the data model document lives in. Defaults to the `sigma_folder_id` project var.
@@ -26,7 +26,7 @@ macros:
 
   - name: table
     description: |
-      A Sigma table element bound to a warehouse relation (`source.kind = 'warehouse-table'`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-single-table. Freezes the element id, and each of its columns'/metrics'/folders'/filters' ids, off `key` plus the table's physical `database.schema.identifier` (lowercased) together, so a self-join (the same physical table bound twice under different keys within one model) gets distinct ids per occurrence rather than colliding. Ids only need to be unique within one `sigma_data_models.model()` call (where `key` is already enforced unique), so the same `key` can still be reused freely across separate models.
+      A Sigma table element bound to a warehouse relation (`source.kind = 'warehouse-table'`) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-single-table. Freezes the element id, and each of its columns'/metrics'/folders'/filters' ids, off `key` plus the table's physical `database.schema.identifier` (lowercased) together, so a self-join (the same physical table bound twice under different keys within one model) gets distinct ids per occurrence rather than colliding. Ids only need to be unique within one `sigma_data_models.model()` call (where `key` is already enforced unique), so the same `key` can still be reused freely across separate models. Use `page=` to assign this table to a named page within a multi-page model; omit it to land on the default page.
     arguments:
       - name: key
         type: string
@@ -58,6 +58,9 @@ macros:
       - name: display_name
         type: string
         description: Sigma display name for this table element. Defaults to a title-cased version of `key` (e.g. `'employees'` → `'Employees'`). Pass explicitly to override when the key's title-cased form isn't the desired label.
+      - name: page
+        type: string
+        description: Name of the page this table should appear on within a multi-page model. Tables sharing the same `page=` value are grouped together; pages are emitted in first-appearance order across the `tables` list. Omit (or leave `none`) to place this table on the default page, named by `page_name` on `sigma_data_models.model()` (falling back to the model's `name`).
 
   - name: column
     description: |

@@ -2,6 +2,7 @@
     name='Territory Carving Demo',
     tables=[
       sigma_data_models.table('accounts', 'stg_accounts',
+        page='Core',
         columns=[
           'account_guid',
           'account_name',
@@ -17,6 +18,7 @@
           sigma_data_models.filter('account_industry', kind='list', options={'mode': 'include', 'values': ['Manufacturing']}),
         ]),
       sigma_data_models.table('employees', 'stg_employees',
+        page='Extensions',
         columns=['employee_guid', 'employee_name']),
     ],
     relationships=[

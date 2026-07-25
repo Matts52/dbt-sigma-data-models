@@ -12,7 +12,9 @@
 {# Relationships nest inside their source table's element in Sigma's schema (not at the
    model level), and reference the target table by its real element id - both of which are
    only knowable once every table in this call has been composed, so resolution happens here
-   rather than in sigma_data_models.relationship() itself. #}
+   rather than in sigma_data_models.relationship() itself. Relationships resolve against all
+   tables globally regardless of which page each table is assigned to, so cross-page
+   relationships work transparently. #}
 {% set relationship_keys = [] %}
 {% for rel in relationships %}
   {% set rel = sigma_data_models.relationship(*rel) if rel is sequence and rel is not mapping and rel is not string else rel %}
@@ -50,17 +52,41 @@
   {% do source_table.relationships.append(relationship_entry) %}
 {% endfor %}
 
-{# Strip internal-only fields (`key`, `_column_ids`) before emitting - neither is a real
-   field in Sigma's schema, they only exist to resolve relationships/folders above. #}
-{% set elements = [] %}
+{# Group tables into pages by their _page field, in first-appearance order. Tables with no
+   _page set land on the default page, named by page_name (falling back to name). When all
+   tables omit _page the output is a single page, identical to the previous single-page
+   behaviour. #}
+{% set default_page_name = page_name or name %}
+{% set page_order = [] %}
+{% set tables_by_page = {} %}
 {% for t in tables %}
-  {% set clean_element = {} %}
-  {% for field_name, field_value in t.items() %}
-    {% if not field_name.startswith('_') and field_name != 'key' %}
-      {% do clean_element.update({field_name: field_value}) %}
-    {% endif %}
+  {% set pname = t._page or default_page_name %}
+  {% if pname not in page_order %}
+    {% do page_order.append(pname) %}
+    {% do tables_by_page.update({pname: []}) %}
+  {% endif %}
+  {% do tables_by_page[pname].append(t) %}
+{% endfor %}
+
+{# Strip internal-only fields (`key`, `_column_ids`, `_page`) before emitting - none are real
+   fields in Sigma's schema, they only exist to resolve relationships/folders/page grouping. #}
+{% set output_pages = [] %}
+{% for pname in page_order %}
+  {% set elements = [] %}
+  {% for t in tables_by_page[pname] %}
+    {% set clean_element = {} %}
+    {% for field_name, field_value in t.items() %}
+      {% if not field_name.startswith('_') and field_name != 'key' %}
+        {% do clean_element.update({field_name: field_value}) %}
+      {% endif %}
+    {% endfor %}
+    {% do elements.append(clean_element) %}
   {% endfor %}
-  {% do elements.append(clean_element) %}
+  {% do output_pages.append({
+    "id": "",
+    "name": pname,
+    "elements": elements,
+  }) %}
 {% endfor %}
 
 {% do return({
@@ -68,12 +94,6 @@
   "name": name,
   "folderId": folder_id or var('sigma_folder_id', none),
   "schemaVersion": 1,
-  "pages": [
-    {
-      "id": "",
-      "name": page_name or name,
-      "elements": elements,
-    }
-  ],
+  "pages": output_pages,
 }) %}
 {% endmacro %}

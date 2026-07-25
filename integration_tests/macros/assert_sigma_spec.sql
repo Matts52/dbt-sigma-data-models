@@ -53,8 +53,8 @@
 {% if accounts_element.kind != 'table' %}
   {% do exceptions.raise_compiler_error("assert_sigma_spec: table element kind must be 'table'") %}
 {% endif %}
-{% if 'key' in accounts_element or '_column_ids' in accounts_element %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: internal-only fields (key, _column_ids) must not appear in the emitted element') %}
+{% if 'key' in accounts_element or '_column_ids' in accounts_element or '_page' in accounts_element %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: internal-only fields (key, _column_ids, _page) must not appear in the emitted element') %}
 {% endif %}
 {% if accounts_element.source.kind != 'warehouse-table' %}
   {% do exceptions.raise_compiler_error("assert_sigma_spec: source.kind must be 'warehouse-table'") %}
@@ -248,6 +248,49 @@
 {% endif %}
 {% if self_join_elements[0].columns[0].id == self_join_elements[1].columns[0].id %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: a self-joined table\'s columns must not collide on id either') %}
+{% endif %}
+
+{# Multi-page: tables with page= set must appear on separate pages in first-appearance order;
+   tables with no page= default to the first page (named by page_name or model name). #}
+{% set multi_page_spec = sigma_data_models.model(
+  name='Multi Page Check',
+  tables=[
+    sigma_data_models.table('accounts_page_check', identifier='accounts',
+      columns=['account_guid', 'account_owner_user_guid'],
+      page='Core'),
+    sigma_data_models.table('employees_page_check', identifier='employees',
+      columns=['employee_guid'],
+      page='Extensions'),
+  ],
+  relationships=[('accounts_page_check', 'account_owner_user_guid', 'employees_page_check', 'employee_guid')],
+) %}
+{% if multi_page_spec.pages | length != 2 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: tables with distinct page= values must produce one page per unique page name') %}
+{% endif %}
+{% if multi_page_spec.pages[0].name != 'Core' or multi_page_spec.pages[1].name != 'Extensions' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: pages must be emitted in first-appearance order of page= values') %}
+{% endif %}
+{% if multi_page_spec.pages[0].elements | length != 1 or multi_page_spec.pages[1].elements | length != 1 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: each table must appear on its assigned page only') %}
+{% endif %}
+{# Cross-page relationship: resolves correctly even when source and target are on different pages. #}
+{% if 'relationships' not in multi_page_spec.pages[0].elements[0] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: cross-page relationship must still nest under the source (from) table element') %}
+{% endif %}
+{% if multi_page_spec.pages[0].elements[0].relationships[0].targetElementId != multi_page_spec.pages[1].elements[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: cross-page relationship.targetElementId must be the target element id, even when on a different page') %}
+{% endif %}
+
+{# Default page: tables without page= land on a page named page_name or model name. #}
+{% set default_page_spec = sigma_data_models.model(
+  name='Default Page Check',
+  page_name='My Page',
+  tables=[
+    sigma_data_models.table('accounts_default_page', identifier='accounts', columns=['account_guid']),
+  ],
+) %}
+{% if default_page_spec.pages | length != 1 or default_page_spec.pages[0].name != 'My Page' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: tables without page= must default to page_name (or model name when page_name is unset)") %}
 {% endif %}
 
 {{ log('assert_sigma_spec: all assertions passed', info=true) }}
