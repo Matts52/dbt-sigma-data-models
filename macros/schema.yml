@@ -20,9 +20,35 @@ macros:
       - name: folder_id
         type: string
         description: Sigma folder id the data model document lives in. Defaults to the `sigma_folder_id` project var.
+      - name: controls
+        type: list[any]
+        description: List of `sigma_data_models.control(...)` specs. Controls are page-level elements (siblings to table elements) that let Sigma workbook users filter data interactively. Each control's `targets` are resolved to real element/column ids here, since that requires the composed table context. Control names must be unique within a model; a duplicate raises a compiler error.
       - name: data_model_id
         type: string
         description: Existing Sigma data model id, for updating a previously-created model. No default - `none` (omitted) for a first-time create, where Sigma assigns one.
+
+  - name: control
+    description: |
+      Normalizes a control into an intent descriptor; `sigma_data_models.model()` resolves each target in `targets` into the real Sigma filter shape (`{source: {kind: 'table', elementId}, columnId}`) once every table in the model has been composed. Controls are page-level elements - siblings to table elements in `pages[].elements[]`, not nested inside a table. The `controlId` in the emitted spec is set to `name`, which is the stable identifier used to reference this control in Sigma formulas. Additional control-type-specific fields (`mode`, `value`, etc.) are passed verbatim via `options={}`.
+    arguments:
+      - name: name
+        type: string
+        description: Control key, used as `controlId` in the emitted spec (the stable formula reference). Also used to freeze its id and (when no `display_name` is supplied) derive the display name via `titleize`. Must be unique within the model.
+      - name: type
+        type: string
+        description: Sigma control type, passed verbatim as `controlType`, e.g. `'value-list'`, `'text'`, `'checkbox'`, `'switch'`, `'date-range'`, `'number-range'`.
+      - name: targets
+        type: list[tuple[string, string]]
+        description: One or more `(table_key, column_name)` tuples identifying the columns this control filters. Each `table_key` must be a key present in the model's `tables` list, and each `column_name` must be an actual column on that table - both raise a compiler error otherwise. Must be non-empty. Controls without an explicit `page=` inherit the page of their first target's table.
+      - name: display_name
+        type: string
+        description: Sigma display name for the control element. Defaults to a title-cased version of `name`.
+      - name: page
+        type: string
+        description: Name of the page this control should appear on. When omitted, the control inherits the page of its first target table (or the model default page if that table has no explicit page).
+      - name: options
+        type: dict[string,any]
+        description: "Control-type-specific fields, passed through verbatim using Sigma's own field names, e.g. `{'mode': 'equals'}` for a text control. Default `{}`. Can't set `id`/`controlId`/`controlType`/`kind`/`filters` - those are already derived from `name`/`type`/`targets`, and `sigma_data_models.model()` raises a compiler error rather than letting `options` silently overwrite them."
 
   - name: table
     description: |

@@ -25,6 +25,11 @@
       columns=['employee_guid']),
   ],
   relationships=[('accounts_shape_check', 'account_owner_user_guid', 'employees_shape_check', 'employee_guid')],
+  controls=[
+    sigma_data_models.control('owner_filter', type='list',
+      targets=[('accounts_shape_check', 'account_owner_user_guid')],
+      display_name='Account Owner'),
+  ],
   folder_id='test-folder-id',
 ) %}
 
@@ -45,12 +50,13 @@
 {% if page.id != '' %}
   {% do exceptions.raise_compiler_error("assert_sigma_spec: page.id must be left blank ('') - Sigma assigns it on creation, per create-a-data-model-from-a-code-representation.md") %}
 {% endif %}
-{% if page.elements | length != 2 %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: page must contain one element per table') %}
+{% if page.elements | length != 3 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: page must contain one element per table plus one per control, got ' ~ (page.elements | length)) %}
 {% endif %}
 
 {% set accounts_element = page.elements[0] %}
 {% set employees_element = page.elements[1] %}
+{% set control_element = page.elements[2] %}
 
 {# Table element shape: id/kind/source/columns/order, matching
    example-representation-data-model-with-a-single-table.md. Internal-only fields (`key`,
@@ -226,6 +232,72 @@
   {% do exceptions.raise_compiler_error("assert_sigma_spec: relationship.name must default to titleize(from) ~ ' → ' ~ titleize(to) when no name is supplied, got '" ~ relationship.name ~ "'") %}
 {% endif %}
 
+{# Control shape: page-level element with {kind, id, controlId, controlType, name, filters},
+   where filters resolves each target to {source: {kind: 'table', elementId}, columnId}. #}
+{% if control_element.kind != 'control' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control element kind must be 'control', got '" ~ control_element.kind ~ "'") %}
+{% endif %}
+{% if '_page' in control_element %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: internal-only field _page must not appear in the emitted control element') %}
+{% endif %}
+{% if control_element.controlId != 'owner_filter' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control.controlId must be the name arg, got '" ~ control_element.controlId ~ "'") %}
+{% endif %}
+{% if control_element.controlType != 'list' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control.controlType must be the type arg, got '" ~ control_element.controlType ~ "'") %}
+{% endif %}
+{% if control_element.name != 'Account Owner' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control.name must use display_name when supplied, got '" ~ control_element.name ~ "'") %}
+{% endif %}
+{% if control_element.filters | length != 1 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a single-target control must produce exactly one filter entry') %}
+{% endif %}
+{% if control_element.filters[0].source.kind != 'table' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control filter source.kind must be 'table'") %}
+{% endif %}
+{% if control_element.filters[0].source.elementId != accounts_element.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: control filter source.elementId must resolve to the target table element id') %}
+{% endif %}
+{% if control_element.filters[0].columnId != accounts_element.columns[1].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: control filter columnId must resolve to the target column id') %}
+{% endif %}
+
+{# Control display_name defaults to titleize(name) when not supplied. #}
+{% set default_name_control = sigma_data_models.model(
+  name='Control Default Name Check',
+  tables=[sigma_data_models.table('accounts_dn_check', identifier='accounts', columns=['account_guid'])],
+  controls=[sigma_data_models.control('account_segment_filter', type='list',
+    targets=[('accounts_dn_check', 'account_guid')])],
+) %}
+{% set dn_control = default_name_control.pages[0].elements[1] %}
+{% if dn_control.name != 'Account Segment Filter' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: control.name must default to titleize(name) when display_name is not supplied, got '" ~ dn_control.name ~ "'") %}
+{% endif %}
+
+{# Multi-target control: targets=[] with two pairs must produce filters of length 2, each
+   resolving to the correct table element and column. #}
+{% set multi_target_spec = sigma_data_models.model(
+  name='Multi Target Control Check',
+  tables=[
+    sigma_data_models.table('mt_accounts', identifier='accounts', columns=['account_guid', 'account_industry']),
+    sigma_data_models.table('mt_employees', identifier='employees', columns=['employee_guid']),
+  ],
+  controls=[
+    sigma_data_models.control('multi_filter', type='list',
+      targets=[('mt_accounts', 'account_industry'), ('mt_employees', 'employee_guid')]),
+  ],
+) %}
+{% set mt_control = multi_target_spec.pages[0].elements[2] %}
+{% if mt_control.filters | length != 2 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a multi-target control must produce one filter entry per target, got ' ~ (mt_control.filters | length)) %}
+{% endif %}
+{% if mt_control.filters[0].source.elementId != multi_target_spec.pages[0].elements[0].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: multi-target control filter[0].source.elementId must resolve to the first target table') %}
+{% endif %}
+{% if mt_control.filters[1].source.elementId != multi_target_spec.pages[0].elements[1].id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: multi-target control filter[1].source.elementId must resolve to the second target table') %}
+{% endif %}
+
 {# freeze_id determinism: identical inputs must yield identical ids across independent calls. #}
 {% set model_spec_again = sigma_data_models.model(
   name='Shape Check',
@@ -240,6 +312,23 @@
 {% endif %}
 {% if model_spec_again.pages[0].elements[0].columns[0].id != passthrough_column.id %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: column ids are not deterministic across identical calls') %}
+{% endif %}
+
+{# Control id determinism: same name must always produce the same frozen id. #}
+{% set model_spec_control_again = sigma_data_models.model(
+  name='Shape Check',
+  tables=[
+    sigma_data_models.table('accounts_shape_check', identifier='accounts',
+      columns=['account_guid', 'account_owner_user_guid']),
+    sigma_data_models.table('employees_shape_check', identifier='employees',
+      columns=['employee_guid']),
+  ],
+  controls=[sigma_data_models.control('owner_filter', type='list',
+    targets=[('accounts_shape_check', 'account_owner_user_guid')],
+    display_name='Account Owner')],
+) %}
+{% if model_spec_control_again.pages[0].elements[2].id != control_element.id %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: control element ids are not deterministic across identical calls') %}
 {% endif %}
 
 {# Leaving `columns` empty auto-populates passthrough columns from the live relation - only
@@ -450,4 +539,48 @@
 
 {% macro assert_unsupported_datetime_format_option_rejected() %}
 {% do sigma_data_models.format('datetime', {'currencySymbol': '$'}) %}
+{% endmacro %}
+
+{% macro assert_duplicate_control_rejected() %}
+{% do sigma_data_models.model(
+  name='Duplicate Control Check',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  controls=[
+    sigma_data_models.control('dup_filter', type='list', targets=[('accounts', 'account_guid')]),
+    sigma_data_models.control('dup_filter', type='list', targets=[('accounts', 'account_guid')]),
+  ],
+) %}
+{% endmacro %}
+
+{% macro assert_empty_control_targets_rejected() %}
+{% do sigma_data_models.model(
+  name='Empty Control Targets Check',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  controls=[sigma_data_models.control('empty_targets', type='list', targets=[])],
+) %}
+{% endmacro %}
+
+{% macro assert_unknown_control_table_rejected() %}
+{% do sigma_data_models.model(
+  name='Unknown Control Table Check',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  controls=[sigma_data_models.control('bad_table_filter', type='list', targets=[('nonexistent_key', 'account_guid')])],
+) %}
+{% endmacro %}
+
+{% macro assert_unknown_control_column_rejected() %}
+{% do sigma_data_models.model(
+  name='Unknown Control Column Check',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  controls=[sigma_data_models.control('bad_col_filter', type='list', targets=[('accounts', 'not_a_real_column')])],
+) %}
+{% endmacro %}
+
+{% macro assert_control_options_reserved_key_rejected() %}
+{% do sigma_data_models.model(
+  name='Control Options Reserved Key Check',
+  tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
+  controls=[sigma_data_models.control('reserved_key_filter', type='list',
+    targets=[('accounts', 'account_guid')], options={'id': 'CLOBBERED'})],
+) %}
 {% endmacro %}

@@ -28,6 +28,10 @@
     relationships=[
       ('accounts', 'account_owner_user_guid', 'employees', 'employee_guid'),
     ],
+    controls=[
+      sigma_data_models.control('industry_filter', type='value-list',
+        targets=[('accounts', 'account_industry')], display_name='Industry'),
+    ],
 ) %}
 
 {{ sigma_data_models.materialize(sigma_data_model) }}
