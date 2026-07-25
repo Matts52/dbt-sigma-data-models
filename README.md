@@ -8,6 +8,18 @@ The compiled shape follows Sigma's own documented [data model representation exa
 
 All dbt adapters are supported. This package is purely compile-time JSON composition — the macros emit Sigma's spec into `config(meta=...)` with no adapter-specific SQL. A warehouse connection is only needed when `columns` are omitted from `sigma_data_models.table()` (column auto-population via `adapter.get_columns_in_relation`); with explicit `columns`, `dbt parse` alone is sufficient.
 
+## Installation
+
+Add to your `packages.yml`:
+
+```yaml
+packages:
+  - package: Matts52/sigma_data_models
+    version: 1.0.0
+```
+
+Then run `dbt deps`.
+
 ## Usage
 
 Define one dbt model per Sigma data model. The model's only job is to carry the compiled spec in its config; give it a trivial `select` body and a non-materializing config:
