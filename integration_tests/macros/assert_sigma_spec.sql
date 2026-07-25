@@ -315,6 +315,71 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: _resolve_column_id must return the same frozen id as direct _column_ids lookup') %}
 {% endif %}
 
+{# Pinned id regression guard: every frozen id below was captured from origin/main before
+   the add-controls-as-first-class-elements branch was introduced and verified identical via
+   a two-branch dbt run-operation diff. Any change to freeze_id(), the freeze_scope formula,
+   column name handling, or the _resolve_* helpers that shifts a frozen id will fail here
+   immediately, without needing a manual branch comparison.
+   Key: sigma_data_models.table('accounts_cmp', identifier='accounts', ...)
+        sigma_data_models.table('employees_cmp', identifier='employees', ...)
+   connected via relationship accounts_cmp.account_owner_user_guid -> employees_cmp.employee_guid #}
+{% set pin_t_accounts = sigma_data_models.table('accounts_cmp', identifier='accounts',
+  columns=[
+    'account_guid',
+    'account_owner_user_guid',
+    sigma_data_models.column('is_named_acme', formula="[Account Name] = 'Acme Corp'"),
+  ],
+  metrics=[sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])')],
+  folders=[sigma_data_models.folder('Identifiers', columns=['account_guid'])],
+  filters=[sigma_data_models.filter('account_owner_user_guid', kind='list', options={'mode': 'include', 'values': ['e1']})],
+) %}
+{% set pin_t_employees = sigma_data_models.table('employees_cmp', identifier='employees',
+  columns=['employee_guid']) %}
+{% set pin_spec = sigma_data_models.model(
+  name='ID Compare Check',
+  tables=[pin_t_accounts, pin_t_employees],
+  relationships=[('accounts_cmp', 'account_owner_user_guid', 'employees_cmp', 'employee_guid')],
+) %}
+{% set pin_acct = pin_spec.pages[0].elements[0] %}
+{% set pin_emp  = pin_spec.pages[0].elements[1] %}
+{% set pinned_ids = {
+  'table:accounts_cmp':                    'd21a84439529e4ee253317068f1c93cb',
+  'col:account_guid':                      '9b109847d842f0bffb997720af7a4662',
+  'col:account_owner_user_guid':           'c7a88d23afacd355203d877e3131c57a',
+  'col:is_named_acme':                     'a3d91ef4d95939d479dfad742397db61',
+  'metric:count_accounts':                 'df4c11361dd5b89082b3e42c44c5ee55',
+  'folder:Identifiers':                    'afafc4f43cb99fd681d6a9051c0831de',
+  'filter:account_owner_user_guid.list':   '3f6b6e4bfeed6da428f17b13477c537e',
+  'rel:sourceColumnId':                    'c7a88d23afacd355203d877e3131c57a',
+  'rel:targetColumnId':                    '37833e7ccf225f404b538601ffb13b50',
+  'rel:targetElementId':                   '4042171a4eb7097424036a4b40e66aa6',
+  'table:employees_cmp':                   '4042171a4eb7097424036a4b40e66aa6',
+  'col:employee_guid':                     '37833e7ccf225f404b538601ffb13b50',
+} %}
+{% set pin_actual = {
+  'table:accounts_cmp':                    pin_acct.id,
+  'col:account_guid':                      pin_acct.columns[0].id,
+  'col:account_owner_user_guid':           pin_acct.columns[1].id,
+  'col:is_named_acme':                     pin_acct.columns[2].id,
+  'metric:count_accounts':                 pin_acct.metrics[0].id,
+  'folder:Identifiers':                    pin_acct.folders[0].id,
+  'filter:account_owner_user_guid.list':   pin_acct.filters[0].id,
+  'rel:sourceColumnId':                    pin_acct.relationships[0]['keys'][0].sourceColumnId,
+  'rel:targetColumnId':                    pin_acct.relationships[0]['keys'][0].targetColumnId,
+  'rel:targetElementId':                   pin_acct.relationships[0].targetElementId,
+  'table:employees_cmp':                   pin_emp.id,
+  'col:employee_guid':                     pin_emp.columns[0].id,
+} %}
+{% for key, expected in pinned_ids.items() %}
+  {% if pin_actual[key] != expected %}
+    {% do exceptions.raise_compiler_error(
+      'assert_sigma_spec: frozen id regression — ' ~ key ~ ' changed from pinned value ' ~
+      expected ~ ' (origin/main) to ' ~ pin_actual[key] ~ '. This means freeze_id(), ' ~
+      'freeze_scope, or a resolution helper changed a value that was stable on main.'
+    ) %}
+  {% endif %}
+{% endfor %}
+
 {# freeze_id determinism: identical inputs must yield identical ids across independent calls. #}
 {% set model_spec_again = sigma_data_models.model(
   name='Shape Check',
