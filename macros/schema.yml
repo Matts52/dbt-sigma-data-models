@@ -33,7 +33,7 @@ macros:
     arguments:
       - name: name
         type: string
-        description: Control key, used as `controlId` in the emitted spec (the stable formula reference). Also used to freeze its id and (when no `display_name` is supplied) derive the display name via `titleize`. Must be unique within the model.
+        description: Control key, used as `controlId` in the emitted spec (the stable formula reference used in Sigma formulas to reference this control). Also used to freeze its id and (when no `display_name` is supplied) derive the display name via `titleize`. Must be unique within this model call — a duplicate raises a compiler error. Note that Sigma formula references to a control use `controlId` globally across the data model (and potentially across models in the same Sigma org), so reusing the same name on controls in different models may cause formula ambiguity in Sigma — choose names that are unique to the data model.
       - name: type
         type: string
         description: Sigma control type, passed verbatim as `controlType`, e.g. `'value-list'`, `'text'`, `'checkbox'`, `'switch'`, `'date-range'`, `'number-range'`.

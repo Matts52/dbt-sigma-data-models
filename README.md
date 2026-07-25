@@ -110,6 +110,8 @@ A page-level interactive filter element. Controls are siblings to table elements
 
 `name` becomes the `controlId` in the emitted spec — the stable identifier used to reference the control in Sigma formulas. `type` is passed verbatim as `controlType` (e.g. `'value-list'`, `'text'`, `'checkbox'`, `'switch'`, `'date-range'`, `'number-range'`). Control names must be unique within a model; a duplicate raises a compiler error. Each target table key and column name must be an actual key/column in the model; any mismatch raises a compiler error.
 
+> **Note on `controlId` uniqueness:** this package enforces uniqueness within a single `sigma_data_models.model()` call, but Sigma resolves `controlId` globally within a data model (and potentially across models in the same org) when evaluating formula references. Reusing the same `name` on controls in separate data models may cause formula ambiguity in Sigma — use names that are unique to the data model, not just unique within one `model()` call.
+
 **Args:**
 
 - `name` (required): Control key, used as `controlId` and to freeze its id. Lowercased. Must be unique within the model.
