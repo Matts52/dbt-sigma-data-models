@@ -89,6 +89,14 @@
   {% if column.formula or column.display_name %}
     {% do entry.update({"name": column.display_name or sigma_data_models.titleize(column.name)}) %}
   {% endif %}
+  {% if column.format %}
+    {% if column.format.get('kind') not in ['number', 'datetime'] %}
+      {% do exceptions.raise_compiler_error(
+        "sigma_data_models.table('" ~ key ~ "'): column '" ~ column.name ~ "' has format.kind '" ~ column.format.get('kind') ~ "' - must be 'number' or 'datetime'. Use sigma_data_models.format() to construct a valid format dict."
+      ) %}
+    {% endif %}
+    {% do entry.update({"format": column.format}) %}
+  {% endif %}
   {% do frozen_columns.append(entry) %}
 {% endfor %}
 
@@ -101,11 +109,20 @@
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate metric name '" ~ metric.name ~ "' - metric names must be unique within a table.") %}
   {% endif %}
   {% do metric_names.append(metric.name) %}
-  {% do frozen_metrics.append({
+  {% set metric_entry = {
     "id": sigma_data_models.freeze_id('metric:' ~ freeze_scope ~ '.' ~ metric.name),
     "formula": metric.formula,
     "name": metric.display_name or sigma_data_models.titleize(metric.name),
-  }) %}
+  } %}
+  {% if metric.format %}
+    {% if metric.format.get('kind') not in ['number', 'datetime'] %}
+      {% do exceptions.raise_compiler_error(
+        "sigma_data_models.table('" ~ key ~ "'): metric '" ~ metric.name ~ "' has format.kind '" ~ metric.format.get('kind') ~ "' - must be 'number' or 'datetime'. Use sigma_data_models.format() to construct a valid format dict."
+      ) %}
+    {% endif %}
+    {% do metric_entry.update({"format": metric.format}) %}
+  {% endif %}
+  {% do frozen_metrics.append(metric_entry) %}
 {% endfor %}
 
 {% set frozen_folders = [] %}

@@ -12,8 +12,13 @@
         'account_guid',
         'account_owner_user_guid',
         sigma_data_models.column('is_named_acme', formula="[Account Name] = 'Acme Corp'"),
+        sigma_data_models.column('account_guid_formatted', display_name='Account GUID',
+          format=sigma_data_models.format('number', {'formatString': '$.2f', 'currencySymbol': '$'})),
       ],
-      metrics={'count_accounts': 'CountDistinct([Account Guid])'},
+      metrics=[
+        sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])',
+          format=sigma_data_models.format('number', {'formatString': 'd'})),
+      ],
       folders=[sigma_data_models.folder('Identifiers', columns=['account_guid'])],
       filters=[sigma_data_models.filter('account_owner_user_guid', kind='list', options={'mode': 'include', 'values': ['e1']})]),
     sigma_data_models.table('employees_shape_check', identifier='employees',
@@ -95,6 +100,30 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: a calculated column name must default to a title-cased version of its key') %}
 {% endif %}
 
+{# Column with format: {id, formula, name, format} - display_name + format on a passthrough column. #}
+{% set formatted_column = accounts_element.columns[3] %}
+{% if formatted_column.keys() | list | sort != ['format', 'formula', 'id', 'name'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a column with display_name and format must have exactly {format, formula, id, name}, got ' ~ (formatted_column.keys() | list)) %}
+{% endif %}
+{% if formatted_column.name != 'Account GUID' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: formatted column name must use display_name, got '" ~ formatted_column.name ~ "'") %}
+{% endif %}
+{% if formatted_column.format.kind != 'number' or formatted_column.format.formatString != '$.2f' or formatted_column.format.currencySymbol != '$' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: format fields did not pass through correctly, got ' ~ formatted_column.format) %}
+{% endif %}
+
+{# Passthrough column with format only (no display_name): must emit {id, formula, format} - no `name`. #}
+{% set fmt_passthrough_table = sigma_data_models.table('fmt_passthrough_check', identifier='accounts', columns=[
+  sigma_data_models.column('account_guid', format=sigma_data_models.format('number', {'formatString': 'd'}))
+]) %}
+{% set fmt_passthrough_col = fmt_passthrough_table.columns[0] %}
+{% if fmt_passthrough_col.keys() | list | sort != ['format', 'formula', 'id'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a passthrough column with format (no display_name) must have exactly {format, formula, id}, got ' ~ (fmt_passthrough_col.keys() | list)) %}
+{% endif %}
+{% if fmt_passthrough_col.format.kind != 'number' %}
+  {% do exceptions.raise_compiler_error("assert_sigma_spec: passthrough format.kind must pass through, got '" ~ fmt_passthrough_col.format.kind ~ "'") %}
+{% endif %}
+
 {# display_name-only passthrough: must emit {id, formula, name} with the given display_name,
    not silently fall back to titleize(column.name). #}
 {% set dn_table = sigma_data_models.table('display_name_col_check', identifier='accounts', columns=[
@@ -130,11 +159,22 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: a table with no metrics must omit the `metrics` key entirely') %}
 {% endif %}
 {% set metric = accounts_element.metrics[0] %}
-{% if metric.keys() | list | sort != ['formula', 'id', 'name'] %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: a metric must have exactly {id, formula, name}, got ' ~ (metric.keys() | list)) %}
+{% if metric.keys() | list | sort != ['format', 'formula', 'id', 'name'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a metric with format must have exactly {id, formula, name, format}, got ' ~ (metric.keys() | list)) %}
 {% endif %}
 {% if metric.formula != 'CountDistinct([Account Guid])' or metric.name != 'Count Accounts' %}
   {% do exceptions.raise_compiler_error('assert_sigma_spec: metric formula/name did not pass through correctly') %}
+{% endif %}
+{% if metric.format.kind != 'number' or metric.format.formatString != 'd' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: metric format fields did not pass through correctly, got ' ~ metric.format) %}
+{% endif %}
+
+{# Metric shape without format: {id, formula, name} only - no `format` key. #}
+{% set no_format_table = sigma_data_models.table('no_format_metric_check', identifier='accounts', columns=['account_guid'],
+  metrics=[sigma_data_models.metric('count_nofmt', 'Count([Account Guid])')]) %}
+{% set no_format_metric = no_format_table.metrics[0] %}
+{% if no_format_metric.keys() | list | sort != ['formula', 'id', 'name'] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a metric without format must have exactly {id, formula, name}, got ' ~ (no_format_metric.keys() | list)) %}
 {% endif %}
 
 {# Folder shape: {id, name, items}, matching example-representation-data-model-with-a-folder.md. #}
@@ -398,4 +438,16 @@
 
 {% macro assert_alphanumeric_column_rejected() %}
 {% do sigma_data_models.table('alphanumeric_column_check', identifier='accounts', columns=['active_paid_users_l30_days']) %}
+{% endmacro %}
+
+{% macro assert_unsupported_format_kind_rejected() %}
+{% do sigma_data_models.format('percent') %}
+{% endmacro %}
+
+{% macro assert_unsupported_number_format_option_rejected() %}
+{% do sigma_data_models.format('number', {'unknownField': 'value'}) %}
+{% endmacro %}
+
+{% macro assert_unsupported_datetime_format_option_rejected() %}
+{% do sigma_data_models.format('datetime', {'currencySymbol': '$'}) %}
 {% endmacro %}
