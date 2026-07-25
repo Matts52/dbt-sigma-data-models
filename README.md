@@ -15,7 +15,7 @@ Add to your `packages.yml`:
 ```yaml
 packages:
   - package: Matts52/sigma_data_models
-    version: 1.0.0
+    version: 1.0.2
 ```
 
 Then run `dbt deps`.
