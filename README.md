@@ -263,12 +263,13 @@ relationships=[
 ### sigma_data_models.folder
 ([source](macros/sigma/folder.sql))
 
-Groups a named subset of a table's columns for display in Sigma. Each entry in `columns` must be an actual column on the table, or `sigma_data_models.table()` raises a compiler error. Folder names must be unique within a table; a duplicate raises a compiler error.
+Groups a named subset of a table's columns and/or metrics for display in Sigma. Each entry in `columns` must be an actual column, and each entry in `metrics` an actual metric, on the table — either raises a compiler error otherwise. Folder names must be unique within a table; a duplicate raises a compiler error.
 
 **Args:**
 
 - `name` (required): Display name for the folder.
-- `columns` (required): List of column names (strings) to include in the folder — must all be actual columns on the table.
+- `columns` (optional): List of column names (strings) to include in the folder — must all be actual columns on the table. Default is `[]`.
+- `metrics` (optional): List of metric names (strings) to include in the folder — must all be actual metrics on the table. Default is `[]`.
 
 **Usage:**
 
@@ -276,6 +277,7 @@ Groups a named subset of a table's columns for display in Sigma. Each entry in `
 folders=[
   sigma_data_models.folder('Identifiers', columns=['account_guid']),
   sigma_data_models.folder('Attributes',  columns=['account_name', 'account_industry']),
+  sigma_data_models.folder('Metrics',     metrics=['count_accounts', 'sum_arr_usd']),
 ]
 ```
 
