@@ -77,7 +77,7 @@ macros:
         description: "Either a dict mapping metric name to formula, or a list of `sigma_data_models.metric(...)` specs. Metric names must be unique within a table; a duplicate raises a compiler error. Omitted entirely from the emitted table when empty, rather than an empty list."
       - name: folders
         type: list[any]
-        description: List of `sigma_data_models.folder(...)` specs, grouping named subsets of `columns` for display - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Omitted entirely from the emitted table when empty. Folder names must be unique within a table; a duplicate raises a compiler error.
+        description: List of `sigma_data_models.folder(...)` specs, grouping named subsets of `columns` and/or `metrics` for display - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Omitted entirely from the emitted table when empty. Folder names must be unique within a table; a duplicate raises a compiler error.
       - name: filters
         type: list[any]
         description: List of `sigma_data_models.filter(...)` specs. Omitted entirely from the emitted table when empty. A table can only have one filter per column/kind pair; a duplicate raises a compiler error.
@@ -144,7 +144,7 @@ macros:
 
   - name: folder
     description: |
-      Normalizes a folder into an intent descriptor; `sigma_data_models.table()` resolves the member `columns` (by name) into the real Sigma folder shape (`{id, name, items}`, where `items` is the member columns' ids) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Each entry in `columns` must be an actual column on the same table, or `sigma_data_models.table()` raises a compiler error.
+      Normalizes a folder into an intent descriptor; `sigma_data_models.table()` resolves the member `columns`/`metrics` (by name) into the real Sigma folder shape (`{id, name, items}`, where `items` is the member columns'/metrics' ids, columns first then metrics, each in declared order) - see https://help.sigmacomputing.com/docs/example-representation-data-model-with-a-folder. Each entry in `columns` must be an actual column, and each entry in `metrics` an actual metric, on the same table - either raises a compiler error otherwise.
     arguments:
       - name: name
         type: string
@@ -152,6 +152,9 @@ macros:
       - name: columns
         type: list[string]
         description: Column names to group under this folder.
+      - name: metrics
+        type: list[string]
+        description: Metric names to group under this folder, alongside (or instead of) `columns`.
 
   - name: filter
     description: |

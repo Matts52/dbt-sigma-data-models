@@ -192,6 +192,34 @@
   {% do exceptions.raise_compiler_error('assert_sigma_spec: folder.items must be the ids of its member columns') %}
 {% endif %}
 
+{# Folder with metrics: items must include both column and metric ids, columns first then
+   metrics, each in declared order (AE-20 / issue #20 - metric folders). #}
+{% set folder_with_metrics_table = sigma_data_models.table('folder_metrics_check', identifier='accounts',
+  columns=['account_guid', 'account_owner_user_guid'],
+  metrics=[
+    sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])'),
+    sigma_data_models.metric('count_owners', 'CountDistinct([Account Owner User Guid])'),
+  ],
+  folders=[sigma_data_models.folder('Mixed', columns=['account_guid'], metrics=['count_accounts', 'count_owners'])]) %}
+{% set mixed_folder = folder_with_metrics_table.folders[0] %}
+{% set expected_mixed_items = [
+  folder_with_metrics_table.columns[0].id,
+  folder_with_metrics_table.metrics[0].id,
+  folder_with_metrics_table.metrics[1].id,
+] %}
+{% if mixed_folder['items'] != expected_mixed_items %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a folder with both columns and metrics must order items as columns first, then metrics, each in declared order, got ' ~ mixed_folder['items']) %}
+{% endif %}
+
+{# A metrics-only folder (no columns) must still resolve correctly. #}
+{% set metrics_only_folder_table = sigma_data_models.table('metrics_only_folder_check', identifier='accounts', columns=['account_guid'],
+  metrics=[sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])')],
+  folders=[sigma_data_models.folder('Metrics', metrics=['count_accounts'])]) %}
+{% set metrics_only_folder = metrics_only_folder_table.folders[0] %}
+{% if metrics_only_folder['items'] != [metrics_only_folder_table.metrics[0].id] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: a metrics-only folder must resolve items to the metric ids, got ' ~ metrics_only_folder['items']) %}
+{% endif %}
+
 {# Filter shape: {id, columnId, kind, ...kind-specific fields verbatim}, matching
    example-representation-data-model-with-filters.md. #}
 {% set filter = accounts_element.filters[0] %}
@@ -561,6 +589,12 @@
 {% macro assert_unknown_folder_column_rejected() %}
 {% do sigma_data_models.table('bad_folder_check', identifier='accounts', columns=['account_guid'],
   folders=[sigma_data_models.folder('Identifiers', columns=['not_a_real_column'])]) %}
+{% endmacro %}
+
+{% macro assert_unknown_folder_metric_rejected() %}
+{% do sigma_data_models.table('bad_folder_metric_check', identifier='accounts', columns=['account_guid'],
+  metrics=[sigma_data_models.metric('count_accounts', 'CountDistinct([Account Guid])')],
+  folders=[sigma_data_models.folder('Metrics', metrics=['not_a_real_metric'])]) %}
 {% endmacro %}
 
 {% macro assert_unknown_filter_column_rejected() %}

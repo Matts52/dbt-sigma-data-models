@@ -101,6 +101,7 @@
 {% endfor %}
 
 {% set frozen_metrics = [] %}
+{% set metric_ids = {} %}
 {% set metrics_is_mapping = metrics is mapping %}
 {% set metric_names = [] %}
 {% for metric in (metrics.items() if metrics_is_mapping else metrics) %}
@@ -109,8 +110,10 @@
     {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): duplicate metric name '" ~ metric.name ~ "' - metric names must be unique within a table.") %}
   {% endif %}
   {% do metric_names.append(metric.name) %}
+  {% set metric_id = sigma_data_models.freeze_id('metric:' ~ freeze_scope ~ '.' ~ metric.name) %}
+  {% do metric_ids.update({metric.name: metric_id}) %}
   {% set metric_entry = {
-    "id": sigma_data_models.freeze_id('metric:' ~ freeze_scope ~ '.' ~ metric.name),
+    "id": metric_id,
     "formula": metric.formula,
     "name": metric.display_name or sigma_data_models.titleize(metric.name),
   } %}
@@ -139,6 +142,13 @@
       {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): folder '" ~ folder.name ~ "' references unknown column '" ~ column_name ~ "' - must be one of " ~ (column_ids.keys() | list)) %}
     {% endif %}
     {% do items.append(column_ids[column_name]) %}
+  {% endfor %}
+  {% for metric_name in folder.get('metrics', []) %}
+    {% set metric_name = metric_name | lower %}
+    {% if metric_name not in metric_ids %}
+      {% do exceptions.raise_compiler_error("sigma_data_models.table('" ~ key ~ "'): folder '" ~ folder.name ~ "' references unknown metric '" ~ metric_name ~ "' - must be one of " ~ (metric_ids.keys() | list)) %}
+    {% endif %}
+    {% do items.append(metric_ids[metric_name]) %}
   {% endfor %}
   {% do frozen_folders.append({
     "id": sigma_data_models.freeze_id('folder:' ~ freeze_scope ~ '.' ~ folder.name),
