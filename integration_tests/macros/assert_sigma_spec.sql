@@ -645,6 +645,10 @@
 {% do sigma_data_models.table('alphanumeric_column_check', identifier='accounts', columns=['active_paid_users_l30_days']) %}
 {% endmacro %}
 
+{% macro assert_digit_token_column_rejected() %}
+{% do sigma_data_models.table('digit_token_column_check', identifier='accounts', columns=['revenue_2023']) %}
+{% endmacro %}
+
 {% macro assert_unsupported_format_kind_rejected() %}
 {% do sigma_data_models.format('percent') %}
 {% endmacro %}
