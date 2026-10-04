@@ -532,38 +532,38 @@
   {% do exceptions.raise_compiler_error("assert_sigma_spec: tables without page= must default to page_name (or model name when page_name is unset)") %}
 {% endif %}
 
-{# Version tags: model() stores them as _tags in the returned dict; materialize() splits them
-   into meta.sigma_data_model_tags, leaving meta.sigma_data_model (the spec) unchanged. #}
+{# Connection tags: model() stores them as _connection_tags in the returned dict; materialize()
+   splits them into meta.sigma_data_model_connection_tags, leaving meta.sigma_data_model unchanged. #}
 {% set tagged_spec = sigma_data_models.model(
-  name='Tags Check',
+  name='Connection Tags Check',
   tables=[
     sigma_data_models.table('tagged_accounts', identifier='accounts',
       connection_id='conn-primary',
       columns=['account_guid']),
   ],
-  tags=[
+  connection_tags=[
     {'name': 'Canada', 'connection_id': 'conn-canada'},
     {'name': 'EU',     'connection_id': 'conn-eu'},
   ],
 ) %}
-{% if tagged_spec._tags | length != 2 %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: model() must store tags as _tags on the returned dict') %}
+{% if tagged_spec._connection_tags | length != 2 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: model() must store connection_tags as _connection_tags on the returned dict') %}
 {% endif %}
-{% if tagged_spec._tags[0].name != 'Canada' or tagged_spec._tags[0].connectionId != 'conn-canada' %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: _tags[0] must have name=Canada and connectionId=conn-canada') %}
+{% if tagged_spec._connection_tags[0].name != 'Canada' or tagged_spec._connection_tags[0].connectionId != 'conn-canada' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: _connection_tags[0] must have name=Canada and connectionId=conn-canada') %}
 {% endif %}
-{% if tagged_spec._tags[1].name != 'EU' or tagged_spec._tags[1].connectionId != 'conn-eu' %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: _tags[1] must have name=EU and connectionId=conn-eu') %}
+{% if tagged_spec._connection_tags[1].name != 'EU' or tagged_spec._connection_tags[1].connectionId != 'conn-eu' %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: _connection_tags[1] must have name=EU and connectionId=conn-eu') %}
 {% endif %}
-{% if '_tags' in tagged_spec.pages[0] %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: _tags must not appear in page output') %}
+{% if '_connection_tags' in tagged_spec.pages[0] %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: _connection_tags must not appear in page output') %}
 {% endif %}
 {% set untagged_spec = sigma_data_models.model(
-  name='No Tags Check',
+  name='No Connection Tags Check',
   tables=[sigma_data_models.table('untagged_accounts', identifier='accounts', columns=['account_guid'])],
 ) %}
-{% if untagged_spec._tags | length != 0 %}
-  {% do exceptions.raise_compiler_error('assert_sigma_spec: model with no tags must have empty _tags list') %}
+{% if untagged_spec._connection_tags | length != 0 %}
+  {% do exceptions.raise_compiler_error('assert_sigma_spec: model with no connection_tags must have empty _connection_tags list') %}
 {% endif %}
 
 {{ log('assert_sigma_spec: all assertions passed', info=true) }}
@@ -739,30 +739,30 @@
 ) %}
 {% endmacro %}
 
-{% macro assert_duplicate_tag_rejected() %}
+{% macro assert_duplicate_connection_tag_rejected() %}
 {% do sigma_data_models.model(
-  name='Duplicate Tag Check',
+  name='Duplicate Connection Tag Check',
   tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
-  tags=[
+  connection_tags=[
     {'name': 'dup', 'connection_id': 'conn-a'},
     {'name': 'dup', 'connection_id': 'conn-b'},
   ],
 ) %}
 {% endmacro %}
 
-{% macro assert_missing_tag_connection_id_rejected() %}
+{% macro assert_missing_connection_tag_connection_id_rejected() %}
 {% do sigma_data_models.model(
-  name='Missing Tag Connection Id Check',
+  name='Missing Connection Tag Connection Id Check',
   tables=[sigma_data_models.table('accounts', identifier='accounts', columns=['account_guid'])],
-  tags=[{'name': 'Bad Tag'}],
+  connection_tags=[{'name': 'Bad Tag'}],
 ) %}
 {% endmacro %}
 
-{% macro assert_bad_tag_from_connection_id_rejected() %}
+{% macro assert_bad_connection_tag_from_connection_id_rejected() %}
 {% do sigma_data_models.model(
-  name='Bad Tag From Connection Id Check',
+  name='Bad Connection Tag From Connection Id Check',
   tables=[sigma_data_models.table('accounts', identifier='accounts', connection_id='conn-real', columns=['account_guid'])],
-  tags=[{'name': 'EU', 'connection_id': 'conn-eu',
+  connection_tags=[{'name': 'EU', 'connection_id': 'conn-eu',
          'paths': [{'from_connection_id': 'conn-nonexistent'}]}],
 ) %}
 {% endmacro %}
