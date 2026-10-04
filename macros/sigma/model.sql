@@ -1,4 +1,4 @@
-{% macro model(name, tables, relationships=[], controls=[], page_name=none, folder_id=none, data_model_id=none) %}
+{% macro model(name, tables, relationships=[], controls=[], page_name=none, folder_id=none, data_model_id=none, tags=[]) %}
 {% set table_keys = [] %}
 {% set table_by_key = {} %}
 {% for t in tables %}
@@ -89,6 +89,51 @@
   {% do frozen_controls.append(frozen_control) %}
 {% endfor %}
 
+{# Collect all connectionIds used by tables, for validating tag paths.from_connection_id. #}
+{% set table_connection_ids = [] %}
+{% for t in tables %}
+  {% if t.source.connectionId not in table_connection_ids %}
+    {% do table_connection_ids.append(t.source.connectionId) %}
+  {% endif %}
+{% endfor %}
+
+{# Validate and normalize version tags. Each tag maps the model's primary connection to a new
+   connection_id, so a sync tool can call POST /v2/dataModels/tag with sourceMappingConfig.
+   Tags are stored as _tags in the returned dict and extracted by materialize() into the
+   separate meta.sigma_data_model_tags key, leaving the spec itself unchanged. #}
+{% set tag_names = [] %}
+{% set frozen_tags = [] %}
+{% for tag in tags %}
+  {% if not tag.name %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): each tag must have a non-empty 'name'.") %}
+  {% endif %}
+  {% if tag.name in tag_names %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): duplicate tag name '" ~ tag.name ~ "' - tag names must be unique within a model.") %}
+  {% endif %}
+  {% do tag_names.append(tag.name) %}
+  {% if not tag.connection_id %}
+    {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): tag '" ~ tag.name ~ "' is missing required 'connection_id'.") %}
+  {% endif %}
+  {% for path in (tag.paths if tag.paths is defined else []) %}
+    {% if path.from_connection_id is defined and path.from_connection_id not in table_connection_ids %}
+      {% do exceptions.raise_compiler_error("sigma_data_models.model('" ~ name ~ "'): tag '" ~ tag.name ~ "' path references from_connection_id '" ~ path.from_connection_id ~ "' which no table in this model uses.") %}
+    {% endif %}
+  {% endfor %}
+  {% set frozen_tag = {'name': tag.name, 'connectionId': tag.connection_id} %}
+  {% if tag.paths is defined %}
+    {% set frozen_paths = [] %}
+    {% for path in tag.paths %}
+      {% set fp = {} %}
+      {% if path.from_connection_id is defined %}{% do fp.update({'fromConnectionId': path.from_connection_id}) %}{% endif %}
+      {% if path.from_path is defined %}{% do fp.update({'fromPath': path.from_path}) %}{% endif %}
+      {% if path.to_path is defined %}{% do fp.update({'toPath': path.to_path}) %}{% endif %}
+      {% do frozen_paths.append(fp) %}
+    {% endfor %}
+    {% do frozen_tag.update({'paths': frozen_paths}) %}
+  {% endif %}
+  {% do frozen_tags.append(frozen_tag) %}
+{% endfor %}
+
 {# Group tables into pages by their _page field, in first-appearance order. Tables with no
    _page set land on the default page, named by page_name (falling back to name). When all
    tables omit _page the output is a single page, identical to the previous single-page
@@ -156,5 +201,6 @@
   "folderId": folder_id or var('sigma_folder_id', none),
   "schemaVersion": 1,
   "pages": output_pages,
+  "_tags": frozen_tags,
 }) %}
 {% endmacro %}
