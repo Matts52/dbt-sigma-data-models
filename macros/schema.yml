@@ -26,6 +26,10 @@ macros:
       - name: data_model_id
         type: string
         description: Existing Sigma data model id, for updating a previously-created model. No default - `none` (omitted) for a first-time create, where Sigma assigns one.
+      - name: connection_tags
+        type: list[dict[string,any]]
+        description: |
+          Version tags that swap the warehouse connection, e.g. one tag per region or environment. Each entry is a dict with `name` (required, unique within the model) and `connection_id` (required, the target Sigma connection id). An optional `paths` list overrides the source mapping for models with multiple connections: each path dict accepts `from_connection_id`, `from_path`, and `to_path` keys. Tags land in `meta.sigma_data_model_connection_tags` alongside `meta.sigma_data_model`; the spec itself is unchanged. A downstream sync tool uses these to call `POST /v2/dataModels/tag` with `sourceMappingConfig` after every spec update. Duplicate names and missing `connection_id` both raise a compiler error, as does a path whose `from_connection_id` doesn't match any table in the model. Default `[]`.
 
   - name: control
     description: |
